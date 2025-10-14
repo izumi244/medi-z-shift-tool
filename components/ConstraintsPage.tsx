@@ -8,11 +8,7 @@ import {
   Edit,
   Trash2,
   Search,
-  X,
-  Clock,
-  Calendar,
-  AlertTriangle,
-  CheckCircle
+  X
 } from 'lucide-react';
 
 // 型定義 - 新要件に合わせて簡略化
@@ -36,44 +32,20 @@ const ConstraintsPage: React.FC = () => {
     description: ''
   });
 
-  // 基本的な制約条件（固定）
+  // 基本的な制約条件（シンプル版）
   const [constraints, setConstraints] = useState<BasicConstraint[]>([
-    {
-      id: '1',
-      name: '労働基準法遵守',
-      description: '連続勤務日数は6日以下とし、週40時間を超えないよう調整する',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
     {
       id: '2',
       name: '希望休優先',
-      description: '希望休の申請を最優先とし、その他の制約は二次的に考慮する',
+      description: '希望休の申請を最優先とする',
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z'
     },
     {
-      id: '3',
-      name: '土曜日制約',
-      description: '桐山は土曜日勤務不可。その他のスタッフは土曜勤務可能',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '4',
-      name: '富沢の短時間勤務制約',
-      description: '富沢の短時間勤務（▲午前 or ◆午後）は同日どちらか一方のみ選択可能',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '5',
-      name: '月間労働時間制約',
-      description: '各スタッフの月間労働時間上限を遵守（富沢・桐山:100h、田中:117h）',
+      id: '6',
+      name: 'シフトパターン制約',
+      description: 'パターンC（▲）とパターンD（◆）は同日どちらか片方のみとする',
       is_active: true,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-01T00:00:00Z'
@@ -146,74 +118,17 @@ const ConstraintsPage: React.FC = () => {
     }
   };
 
-  // 制約の重要度アイコン
-  const getConstraintIcon = (name: string) => {
-    if (name.includes('労働基準法') || name.includes('法')) {
-      return <AlertTriangle className="w-5 h-5 text-red-500" />;
-    } else if (name.includes('希望休')) {
-      return <Calendar className="w-5 h-5 text-blue-500" />;
-    } else if (name.includes('時間')) {
-      return <Clock className="w-5 h-5 text-orange-500" />;
-    }
-    return <CheckCircle className="w-5 h-5 text-green-500" />;
-  };
-
   return (
     <div className="space-y-6">
       {/* ページヘッダー */}
       <div className="border-b-2 border-gray-100 pb-6">
         <h2 className="text-3xl font-bold text-indigo-600 mb-2 flex items-center gap-3">
           <Bot className="w-8 h-8" />
-          基本制約条件管理
+          AI制約条件管理
         </h2>
         <p className="text-lg text-gray-600">
-          シフト作成時の基本ルール・制約条件を管理
+          自然言語での制約方針設定
         </p>
-      </div>
-
-      {/* 統計カード */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-blue-50 p-6 rounded-2xl border border-blue-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-blue-900">
-                {constraints.filter(c => c.is_active).length}
-              </div>
-              <div className="text-sm text-blue-600">有効な制約条件</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-orange-900">
-                {constraints.filter(c => c.name.includes('労働基準法') || c.name.includes('法')).length}
-              </div>
-              <div className="text-sm text-orange-600">法的制約</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-green-50 p-6 rounded-2xl border border-green-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-green-900">
-                {constraints.filter(c => c.name.includes('時間') || c.name.includes('勤務')).length}
-              </div>
-              <div className="text-sm text-green-600">勤務制約</div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* 検索・追加ボタン */}
@@ -236,7 +151,7 @@ const ConstraintsPage: React.FC = () => {
           className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
         >
           <Plus className="w-5 h-5" />
-          カスタム制約追加
+          制約条件追加
         </button>
       </div>
 
@@ -249,20 +164,15 @@ const ConstraintsPage: React.FC = () => {
               className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="flex-shrink-0 mt-1">
-                    {getConstraintIcon(constraint.name)}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">
-                      {constraint.name}
-                    </h3>
-                    <p className="text-gray-700 leading-relaxed mb-3">
-                      {constraint.description}
-                    </p>
-                    <div className="text-sm text-gray-500">
-                      更新日: {new Date(constraint.updated_at).toLocaleDateString('ja-JP')}
-                    </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    {constraint.name}
+                  </h3>
+                  <p className="text-gray-700 leading-relaxed mb-3">
+                    {constraint.description}
+                  </p>
+                  <div className="text-sm text-gray-500">
+                    更新日: {new Date(constraint.updated_at).toLocaleDateString('ja-JP')}
                   </div>
                 </div>
 
@@ -301,7 +211,7 @@ const ConstraintsPage: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-indigo-600">
-                {editingConstraint ? '制約条件編集' : 'カスタム制約条件追加'}
+                {editingConstraint ? '制約条件編集' : '制約条件追加'}
               </h3>
               <button
                 onClick={closeModal}
@@ -311,7 +221,7 @@ const ConstraintsPage: React.FC = () => {
               </button>
             </div>
 
-            <form className="space-y-6">
+            <div className="space-y-6">
               <div>
                 <label htmlFor="constraint-name" className="block text-sm font-semibold text-gray-700 mb-2">
                   制約名 <span className="text-red-500">*</span>
@@ -341,11 +251,12 @@ const ConstraintsPage: React.FC = () => {
               </div>
 
               <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                <h4 className="font-semibold text-blue-800 mb-2">💡 制約設定のヒント</h4>
+                <h4 className="font-semibold text-blue-800 mb-2">制約設定のヒント</h4>
                 <ul className="text-sm text-blue-700 space-y-1">
                   <li>• 具体的で分かりやすい制約内容を記載してください</li>
                   <li>• 法的制約は「労働基準法」等のキーワードを含めてください</li>
                   <li>• 時間制約は具体的な時間数を明記してください</li>
+                  <li>• 記号システム（○▲◆×）での表示を考慮してください</li>
                 </ul>
               </div>
 
@@ -366,7 +277,7 @@ const ConstraintsPage: React.FC = () => {
                   {editingConstraint ? '更新' : '追加'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

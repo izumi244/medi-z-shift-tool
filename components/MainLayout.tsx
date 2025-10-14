@@ -51,32 +51,32 @@ const getFilteredMenuItems = (userRole: UserRole): MenuItem[] => {
     {
       id: 'employee',
       icon: <Users className="w-5 h-5" />,
-      title: 'スタッフ管理',
-      description: '4名の基本情報・制約設定'
+      title: '従業員管理',
+      description: '従業員情報・勤務制約設定'
     },
     {
       id: 'shiftPattern',
       icon: <Clock className="w-5 h-5" />,
-      title: 'シフトパターン',
-      description: '5つの勤務パターン管理'
+      title: 'シフトパターン管理',
+      description: '勤務パターンの設定'
     },
     {
       id: 'leave',
       icon: <Calendar className="w-5 h-5" />,
       title: '希望休管理',
-      description: 'カレンダー/リスト表示'
+      description: 'スタッフの希望休申請・承認・編集機能'
     },
     {
       id: 'constraints',
       icon: <Bot className="w-5 h-5" />,
-      title: '基本制約管理',
-      description: '勤務制約・ルール設定'
+      title: 'AI制約条件管理',
+      description: '自然言語での制約方針設定'
     },
     {
       id: 'shift',
       icon: <ClipboardList className="w-5 h-5" />,
       title: 'シフト表示',
-      description: '記号表示・編集'
+      description: '作成されたシフトの確認・編集'
     }
   ]
   
