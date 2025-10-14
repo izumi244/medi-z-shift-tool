@@ -1,22 +1,21 @@
-// types/index.ts - 新要件対応版
+// types/index.ts - 新要件対応版（修正）
 
 import { ReactNode } from 'react'
 
 // ==================== 基本型定義 ====================
 
-// 配置場所管理削除により workplace を除去
 export type PageType = 'dataInput' | 'employee' | 'leave' | 'constraints' | 'shift' | 'shiftPattern'
 
 export type EmploymentType = '常勤' | 'パート'
-export type JobType = '看護師' | '臨床検査技師'
+export type JobType = '看護師' | '臨床検査技師' | '医療事務'
 
-// 記号システム追加
-export type ShiftSymbol = '○' | '▲' | '◆' | '×'
+// 記号システム（6種類に拡張）
+export type ShiftSymbol = '○' | '▲' | '◆' | '×' | '✕' | '■' | '▶'
 
 // 固定5パターンに変更
 export type ShiftPatternType = 'fulltime_weekday' | 'saturday' | 'morning_short' | 'afternoon_short' | 'kirayama_weekday'
 
-export type LeaveType = '希望休' | '有休' | '忌引' | '病欠' | 'その他'
+export type LeaveType = '希望休' | '有給' | '忌引' | '病欠' | 'その他' | '出勤可能'
 export type RequestStatus = '申請中' | '承認' | '却下'
 
 // ==================== データ型定義 ====================
@@ -25,14 +24,16 @@ export type RequestStatus = '申請中' | '承認' | '却下'
 export interface ShiftPattern {
   id: string
   name: string
-  start_time: string
-  end_time: string
-  break_minutes: number
-  symbol: ShiftSymbol  // 記号追加
-  applicable_staff?: string[]  // 適用可能スタッフ（富沢専用パターン等）
+  symbol: ShiftSymbol
+  startTime: string          // キャメルケースに統一
+  endTime: string            // キャメルケースに統一
+  workingHours: number       // 実労働時間
+  breakMinutes?: number      // 休憩時間（分）
+  applicableStaff?: string[] // 適用可能スタッフ
+  color?: string             // 表示用カラー
 }
 
-// 従業員（制約フィールド追加、配置場所関連削除）
+// 従業員（制約フィールド追加）
 export interface Employee {
   id: string
   name: string
@@ -88,6 +89,16 @@ export interface LeaveRequest {
 export interface AIConstraintGuideline {
   id: string
   constraint_content: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// 制約条件（Constraint型を追加）
+export interface Constraint {
+  id: string
+  name: string
+  description: string
   is_active: boolean
   created_at: string
   updated_at: string
@@ -183,7 +194,7 @@ export interface PageProps {
 
 // ==================== モック用型定義 ====================
 
-// 統計データ（配置場所削除により調整）
+// 統計データ
 export interface Statistics {
   employee_count: number
   leave_requests_count: number
@@ -210,7 +221,7 @@ export interface DateRange {
   end: string
 }
 
-// 検索フィルター（配置場所削除により調整）
+// 検索フィルター
 export interface SearchFilters {
   text?: string
   employment_type?: EmploymentType[]

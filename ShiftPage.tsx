@@ -1,0 +1,426 @@
+'use client'
+
+import React, { useState } from 'react'
+import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
+import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
+
+interface ShiftAssignment {
+  symbol: ShiftSymbol
+  patternId?: string
+  reason?: string
+}
+
+const ShiftPage: React.FC = () => {
+  // Context からデータを取得（ローカル状態管理から変更）
+  const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
+  
+  const [currentDate, setCurrentDate] = useState(new Date(2025, 9, 1)) // 2025年10月
+  const [editMode, setEditMode] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingCell, setEditingCell] = useState<{employeeId: string, day: number, employeeName: string} | null>(null)
+  
+  const [editValues, setEditValues] = useState({
+    symbol: '○' as ShiftSymbol,
+    reason: ''
+  })
+
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+  const monthName = currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  // カレンダー日付生成
+  const generateDays = () => {
+    const daysArray = []
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day)
+      const dayOfWeek = date.toLocaleDateString('ja-JP', { weekday: 'short' })
+      daysArray.push({ 
+        day, 
+        dayOfWeek, 
+        isSaturday: dayOfWeek === '土', 
+        isSunday: dayOfWeek === '日' 
+      })
+    }
+    return daysArray
+  }
+  const days = generateDays()
+
+  // セルクリック時の編集モーダル表示
+  const handleCellClick = (employeeId: string, day: number, employeeName: string) => {
+    if (!editMode) return
+
+    const dayInfo = days[day - 1]
+
+    // 水曜日と日曜日はクリニック休診
+    if (dayInfo?.dayOfWeek === '水' || dayInfo?.dayOfWeek === '日') {
+      alert('水曜日と日曜日はクリニック休診日です。')
+      return
+    }
+
+    // ヘルプスタッフのシフト組み込み制限
+    if (employeeName === 'ヘルプ') {
+      alert('ヘルプスタッフはシフト組み込み対象外です。×記号での表示のみ可能です。')
+      return
+    }
+
+    // 桐山の土曜勤務制限チェック
+    if (employeeName === '桐山' && dayInfo?.isSaturday) {
+      alert('桐山は土曜勤務不可です。')
+      return
+    }
+    
+    const shift = shiftData[employeeId]?.[day]
+    setEditingCell({employeeId, day, employeeName})
+
+    setEditValues({
+      symbol: shift?.symbol || '○',
+      reason: shift?.reason || ''
+    })
+    setIsEditModalOpen(true)
+  }
+
+  // 編集内容保存
+  const handleSaveEdit = () => {
+    if (!editingCell) return
+    const { employeeId, day } = editingCell
+
+    const newShift: ShiftAssignment = {
+      symbol: editValues.symbol,
+      reason: editValues.symbol === '×' ? editValues.reason : undefined,
+      patternId: getPatternIdFromSymbol(editValues.symbol, employeeId)
+    }
+
+    // updateShift 関数を使用（setShiftData から変更）
+    updateShift(employeeId, day, newShift)
+    
+    handleCloseModal()
+  }
+
+  // 記号からパターンIDを取得（動的に判定）
+  const getPatternIdFromSymbol = (symbol: ShiftSymbol, employeeId: string): string | undefined => {
+    const employee = employees.find(e => e.id === employeeId)
+    if (!employee || symbol === '×') return undefined
+
+    // 従業員名とシンボルに基づいてパターンを検索
+    const matchingPatterns = shiftPatterns.filter(p => 
+      p.symbol === symbol && p.applicableStaff?.includes(employee.name)
+    )
+
+    if (matchingPatterns.length > 0) {
+      // 桐山の場合はパターンE、富沢の場合は記号に応じて選択
+      if (employee.name === '桐山' && symbol === '○') {
+        return matchingPatterns.find(p => p.id === '5')?.id || matchingPatterns[0].id
+      }
+      if (symbol === '▲') return matchingPatterns.find(p => p.id === '3')?.id || matchingPatterns[0].id
+      if (symbol === '◆') return matchingPatterns.find(p => p.id === '4')?.id || matchingPatterns[0].id
+      // ○の場合はパターンA（基本）
+      return matchingPatterns.find(p => p.id === '1')?.id || matchingPatterns[0].id
+    }
+    
+    return undefined
+  }
+
+  const handleCloseModal = () => {
+    setIsEditModalOpen(false)
+    setEditingCell(null)
+  }
+
+  const changeMonth = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate)
+    newDate.setMonth(month + (direction === 'prev' ? -1 : 1))
+    setCurrentDate(newDate)
+  }
+
+  // セル表示用のコンポーネント
+  const renderShiftCell = (employee: Employee, day: number, dayInfo: { isSunday: boolean, isSaturday: boolean, dayOfWeek: string }) => {
+    const shift = shiftData[employee.id]?.[day]
+    const isClinicClosed = dayInfo.dayOfWeek === '水' || dayInfo.isSunday
+    
+    const cellClass = `border-r border-gray-200 h-20 p-1 align-middle text-center ${
+      isClinicClosed ? 'bg-gray-100' : 'bg-white'
+    } ${editMode && !isClinicClosed ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`
+
+    if (!shift || !shift.symbol) {
+      return <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)} />
+    }
+
+    // 記号の色分け（パターンIDに基づく）
+    const getSymbolColor = (symbol: ShiftSymbol, patternId?: string) => {
+      if (symbol === '×') return 'text-red-600 bg-red-100'
+      if (symbol === '▲') return 'text-green-600 bg-green-100'
+      if (symbol === '◆') return 'text-purple-600 bg-purple-100'
+      if (symbol === '○') {
+        // パターンIDに応じて色分け
+        if (patternId === '5') return 'text-orange-600 bg-orange-100' // パターンE（桐山専用）
+        if (patternId === '2') return 'text-blue-400 bg-blue-50' // パターンB（土曜）
+        return 'text-blue-600 bg-blue-100' // パターンA（基本）
+      }
+      return 'text-gray-600 bg-gray-100'
+    }
+
+    const pattern = shiftPatterns.find(p => p.id === shift.patternId)
+    const timeInfo = pattern ? `${pattern.startTime}-${pattern.endTime}` : shift.reason || ''
+
+    return (
+      <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)}>
+        <div className="h-full flex flex-col items-center justify-center">
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${getSymbolColor(shift.symbol, shift.patternId)}`}>
+            {shift.symbol}
+          </div>
+          {timeInfo && (
+            <div className="text-xs text-gray-500 mt-1 w-full text-center px-1">
+              {timeInfo}
+            </div>
+          )}
+        </div>
+      </td>
+    )
+  }
+
+  // 労働時間統計計算
+  const calculateMonthlyStats = (employeeId: string) => {
+    const shifts = shiftData[employeeId] || {}
+    let totalDays = 0
+    let totalHours = 0
+
+    Object.values(shifts).forEach(shift => {
+      if (shift.symbol !== '×' && shift.patternId) {
+        const pattern = shiftPatterns.find(p => p.id === shift.patternId)
+        if (pattern) {
+          totalDays++
+          totalHours += pattern.workingHours
+        }
+      }
+    })
+
+    return { totalDays, totalHours }
+  }
+
+  // employee.type の代替表示文字列を生成（()内の文言を削除）
+  const getEmployeeTypeDisplay = (employee: Employee): string => {
+    if (employee.name === '富沢') return '週4日・月100h'
+    if (employee.name === '田中') return '週5日・月117h'
+    if (employee.name === '桐山') return '週4日・月100h'
+    if (employee.name === 'ヘルプ') return '表示のみ'
+    return `週${employee.max_days_per_week}日・月${employee.max_hours_per_month}h`
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ページヘッダー */}
+      <div className="pb-6">
+        <h2 className="text-3xl font-bold text-indigo-600 mb-2 flex items-center gap-3">
+          <ClipboardList className="w-8 h-8" />
+          シフト表示
+        </h2>
+        <p className="text-lg text-gray-600">作成されたシフトの確認・編集</p>
+      </div>
+
+      {/* 制御パネル */}
+      <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => changeMonth('prev')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+              <ChevronLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <h3 className="text-2xl font-bold text-gray-800">{monthName}</h3>
+            <button onClick={() => changeMonth('next')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+              <ChevronRight className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                editMode ? 'bg-yellow-500 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Edit3 className="w-4 h-4" />
+              {editMode ? '編集中' : '編集'}
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg">
+              <Download className="w-4 h-4" />
+              PDF出力
+            </button>
+          </div>
+        </div>
+
+        {/* 記号説明 - 全パターン表示 */}
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">○</div>
+            <div className="flex flex-col">
+              <span className="text-blue-800 font-medium">パターンA</span>
+              <span className="text-xs text-blue-600">09:00-18:00</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">○</div>
+            <div className="flex flex-col">
+              <span className="text-blue-800 font-medium">パターンB</span>
+              <span className="text-xs text-blue-600">09:00-16:00</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold">▲</div>
+            <div className="flex flex-col">
+              <span className="text-green-800 font-medium">パターンC</span>
+              <span className="text-xs text-green-600">09:00-13:00</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold">◆</div>
+            <div className="flex flex-col">
+              <span className="text-purple-800 font-medium">パターンD</span>
+              <span className="text-xs text-purple-600">14:00-18:00</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-orange-50 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold">○</div>
+            <div className="flex flex-col">
+              <span className="text-orange-800 font-medium">パターンE</span>
+              <span className="text-xs text-orange-600">09:00-17:00</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold">×</div>
+            <div className="flex flex-col">
+              <span className="text-red-800 font-medium">休み</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* シフト表 */}
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse table-fixed min-w-[800px]">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="w-32 border-r border-gray-200 p-3 text-sm font-bold text-gray-700 sticky left-0 bg-gray-50 z-10">
+                  スタッフ
+                </th>
+                {days.map(({ day, dayOfWeek, isSaturday, isSunday }) => {
+                  const isClinicClosed = dayOfWeek === '水' || isSunday
+                  return (
+                    <th key={day} className={`p-2 text-center font-medium text-gray-700 text-xs w-16 border-r border-gray-200 ${
+                      isClinicClosed ? 'bg-gray-100' : 'bg-gray-50'
+                    }`}>
+                      <div className="font-bold">{day}</div>
+                      <div className="text-xs">{dayOfWeek}</div>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map(employee => {
+                return (
+                  <tr key={employee.id} className="border-b border-gray-200">
+                    <td className="sticky left-0 bg-white border-r border-gray-200 p-3 z-10">
+                      <div className="text-sm font-semibold text-gray-800">{employee.name}</div>
+                      <div className="text-xs text-gray-600">{getEmployeeTypeDisplay(employee)}</div>
+                    </td>
+                    {days.map(({ day, isSaturday, isSunday, dayOfWeek }) => 
+                      renderShiftCell(employee, day, { isSaturday, isSunday, dayOfWeek })
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 編集モーダル */}
+      {isEditModalOpen && editingCell && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800">
+                  {editingCell.employeeName} - {editingCell.day}日
+                </h3>
+                <button onClick={handleCloseModal} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <div className="block text-sm font-semibold text-gray-700 mb-3">記号選択</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {['○', '▲', '◆', '×'].map((symbol) => {
+                    const employee = employees.find(e => e.id === editingCell.employeeId)
+                    const isDisabled = (
+                      (symbol === '▲' || symbol === '◆') && employee?.name !== '富沢'
+                    )
+
+                    return (
+                      <button
+                        key={symbol}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => setEditValues(prev => ({ ...prev, symbol: symbol as ShiftSymbol }))}
+                        className={`p-4 rounded-xl border-2 transition-all ${
+                          editValues.symbol === symbol
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : isDisabled
+                            ? 'border-gray-200 bg-gray-100 cursor-not-allowed opacity-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="text-2xl font-bold mb-1">{symbol}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {editValues.symbol === '×' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">休みの理由</label>
+                  <select
+                    value={editValues.reason}
+                    onChange={(e) => setEditValues(prev => ({ ...prev, reason: e.target.value }))}
+                    className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+                  >
+                    <option value="">選択してください</option>
+                    <option value="希望休">希望休</option>
+                    <option value="有給">有給</option>
+                    <option value="休み">休み</option>
+                    <option value="忌引">忌引</option>
+                    <option value="病欠">病欠</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default ShiftPage
