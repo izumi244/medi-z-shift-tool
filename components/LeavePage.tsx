@@ -1,7 +1,6 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-
+import React, { useState } from 'react'
 import { 
   Calendar, 
   Plus, 
@@ -14,33 +13,21 @@ import {
   Trash2,
   Eye,
   X
-} from 'lucide-react';
-
-// 型定義
-interface LeaveRequest {
-  id: string;
-  employee_id: string;
-  date: string;
-  leave_type: '希望休' | '有給' | '忌引' | '病欠' | 'その他' | '出勤可能';
-  reason: string;
-  status: RequestStatus;
-  created_at: string;
-  updated_at: string;
-  approved_by?: string;
-  approved_at?: string;
-  rejection_reason?: string;
-}
-
-type RequestStatus = '申請中' | '承認' | '却下';
+} from 'lucide-react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
+import type { LeaveRequest, RequestStatus } from '@/types'
 
 const LeavePage: React.FC = () => {
-  const [currentMonth, setCurrentMonth] = useState('2025-08');
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
-  const [filterStatus, setFilterStatus] = useState<RequestStatus | ''>('');
-  const [filterEmployee, setFilterEmployee] = useState('');
-  const [requestType, setRequestType] = useState<'leave' | 'work'>('leave');
+  // Contextからデータ取得（ローカル状態管理から変更）
+  const { employees, leaveRequests, addLeaveRequest, updateLeaveRequest } = useShiftData()
+  
+  const [currentMonth, setCurrentMonth] = useState('2025-08')
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null)
+  const [filterStatus, setFilterStatus] = useState<RequestStatus | ''>('')
+  const [filterEmployee, setFilterEmployee] = useState('')
+  const [requestType, setRequestType] = useState<'leave' | 'work'>('leave')
 
   // フォームデータ
   const [formData, setFormData] = useState({
@@ -48,188 +35,121 @@ const LeavePage: React.FC = () => {
     date: '',
     leave_type: '希望休' as LeaveRequest['leave_type'],
     reason: ''
-  });
-
-  // サンプル従業員データ
-  const employees = [
-    { id: '1', name: '富沢' },
-    { id: '2', name: '田中' },
-    { id: '3', name: '桐山' },
-    { id: '4', name: 'ヘルプ' }
-  ];
-
-  // サンプル希望休データ
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([
-    {
-      id: '1',
-      employee_id: '1',
-      date: '2025-08-15',
-      leave_type: '希望休',
-      reason: '家族の用事',
-      status: '申請中',
-      created_at: '2025-08-01T09:00:00Z',
-      updated_at: '2025-08-01T09:00:00Z'
-    },
-    {
-      id: '2',
-      employee_id: '2',
-      date: '2025-08-20',
-      leave_type: '有給',
-      reason: '旅行',
-      status: '承認',
-      created_at: '2025-07-25T14:30:00Z',
-      updated_at: '2025-07-26T10:15:00Z',
-      approved_by: 'admin',
-      approved_at: '2025-07-26T10:15:00Z'
-    },
-    {
-      id: '3',
-      employee_id: '3',
-      date: '2025-08-25',
-      leave_type: '病欠',
-      reason: '体調不良',
-      status: '却下',
-      created_at: '2025-08-10T16:45:00Z',
-      updated_at: '2025-08-11T09:20:00Z',
-      rejection_reason: '人員不足のため'
-    },
-    {
-      id: '4',
-      employee_id: '4',
-      date: '2025-08-10', // 本来休みの日曜日
-      leave_type: '出勤可能',
-      reason: '急な欠員対応可能',
-      status: '承認',
-      created_at: '2025-08-05T11:00:00Z',
-      updated_at: '2025-08-05T11:00:00Z'
-    }
-  ]);
+  })
 
   // 従業員名を取得
   const getEmployeeName = (employeeId: string) => {
-    return employees.find(emp => emp.id === employeeId)?.name || '不明';
-  };
+    return employees.find(emp => emp.id === employeeId)?.name || '不明'
+  }
 
   // 月を変更
   const changeMonth = (direction: 'prev' | 'next') => {
-    const date = new Date(currentMonth);
+    const date = new Date(currentMonth)
     if (direction === 'prev') {
-      date.setMonth(date.getMonth() - 1);
+      date.setMonth(date.getMonth() - 1)
     } else {
-      date.setMonth(date.getMonth() + 1);
+      date.setMonth(date.getMonth() + 1)
     }
-    setCurrentMonth(date.toISOString().slice(0, 7));
-  };
+    setCurrentMonth(date.toISOString().slice(0, 7))
+  }
 
   // カレンダー用の日付計算
   const getDaysInMonth = (month: string) => {
-    const date = new Date(month);
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  };
+    const date = new Date(month)
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  }
 
   const getFirstDayOfWeek = (month: string) => {
-    const date = new Date(month);
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  };
+    const date = new Date(month)
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay()
+  }
 
-  // 希望休申請を承認
+  // 希望休申請を承認（updateLeaveRequest関数を使用）
   const approveLeave = (id: string) => {
-    setLeaveRequests(prev => prev.map(leave => 
-      leave.id === id 
-        ? { 
-            ...leave, 
-            status: '承認' as RequestStatus, 
-            approved_by: 'admin',
-            approved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        : leave
-    ));
-  };
+    updateLeaveRequest(id, {
+      status: '承認',
+      approved_by: 'admin',
+      approved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  }
 
-  // 希望休申請を却下
+  // 希望休申請を却下（updateLeaveRequest関数を使用）
   const rejectLeave = (id: string, reason: string) => {
-    setLeaveRequests(prev => prev.map(leave => 
-      leave.id === id 
-        ? { 
-            ...leave, 
-            status: '却下' as RequestStatus, 
-            rejection_reason: reason,
-            updated_at: new Date().toISOString()
-          }
-        : leave
-    ));
-  };
+    updateLeaveRequest(id, {
+      status: '却下',
+      rejection_reason: reason,
+      updated_at: new Date().toISOString()
+    })
+  }
 
   const openModal = () => {
-    setRequestType('leave');
+    setRequestType('leave')
     setFormData({
       employee_id: '',
       date: '',
       leave_type: '希望休',
       reason: ''
-    });
-    setIsModalOpen(true);
-  };
+    })
+    setIsModalOpen(true)
+  }
 
-  // 新規申請を追加
+  // 新規申請を追加（addLeaveRequest関数を使用）
   const addRequest = () => {
-    const finalLeaveType = requestType === 'work' ? '出勤可能' : formData.leave_type;
+    const finalLeaveType = requestType === 'work' ? '出勤可能' : formData.leave_type
 
-    const newRequest: LeaveRequest = {
-      id: (leaveRequests.length + 1).toString(),
-      ...formData,
+    addLeaveRequest({
+      employee_id: formData.employee_id,
+      date: formData.date,
       leave_type: finalLeaveType,
-      status: '申請中',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    setLeaveRequests(prev => [...prev, newRequest]);
-    setIsModalOpen(false);
-  };
+      reason: formData.reason,
+      status: '申請中'
+    })
+    setIsModalOpen(false)
+  }
 
   // フィルタリングされた希望休
   const filteredLeaves = leaveRequests.filter(leave => {
-    const matchesStatus = !filterStatus || leave.status === filterStatus;
-    const matchesEmployee = !filterEmployee || getEmployeeName(leave.employee_id).includes(filterEmployee);
-    const matchesMonth = leave.date.startsWith(currentMonth);
-    return matchesStatus && matchesEmployee && matchesMonth;
-  });
+    const matchesStatus = !filterStatus || leave.status === filterStatus
+    const matchesEmployee = !filterEmployee || getEmployeeName(leave.employee_id).includes(filterEmployee)
+    const matchesMonth = leave.date.startsWith(currentMonth)
+    return matchesStatus && matchesEmployee && matchesMonth
+  })
 
   // カレンダーのレンダリング用データ
   const generateCalendarDays = () => {
-    const daysInMonth = getDaysInMonth(currentMonth);
-    const firstDay = getFirstDayOfWeek(currentMonth);
-    const days = [];
+    const daysInMonth = getDaysInMonth(currentMonth)
+    const firstDay = getFirstDayOfWeek(currentMonth)
+    const days = []
 
     // 前月の空の日
     for (let i = 0; i < firstDay; i++) {
-      days.push(null);
+      days.push(null)
     }
 
     // 現在月の日
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = `${currentMonth}-${day.toString().padStart(2, '0')}`;
-      const dayLeaves = filteredLeaves.filter(leave => leave.date === date);
-      days.push({ day, date, leaves: dayLeaves });
+      const date = `${currentMonth}-${day.toString().padStart(2, '0')}`
+      const dayLeaves = filteredLeaves.filter(leave => leave.date === date)
+      days.push({ day, date, leaves: dayLeaves })
     }
 
-    return days;
-  };
+    return days
+  }
 
   // ステータスアイコンを取得
   const getStatusIcon = (status: RequestStatus) => {
     switch (status) {
       case '申請中':
-        return <Clock className="w-4 h-4 text-yellow-600" />;
+        return <Clock className="w-4 h-4 text-yellow-600" />
       case '承認':
-        return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+        return <CheckCircle2 className="w-4 h-4 text-green-600" />
       case '却下':
-        return <XCircle className="w-4 h-4 text-red-600" />;
+        return <XCircle className="w-4 h-4 text-red-600" />
       default:
-        return <Clock className="w-4 h-4 text-gray-600" />;
+        return <Clock className="w-4 h-4 text-gray-600" />
     }
-  };
+  }
 
   // ステータス用のスタイルクラス
   const getStatusStyles = (status: RequestStatus) => {
@@ -239,27 +159,27 @@ const LeavePage: React.FC = () => {
           bg: 'bg-yellow-100',
           text: 'text-yellow-800',
           border: 'border-yellow-200'
-        };
+        }
       case '承認':
         return {
           bg: 'bg-green-100',
           text: 'text-green-800',
           border: 'border-green-200'
-        };
+        }
       case '却下':
         return {
           bg: 'bg-red-100',
           text: 'text-red-800',
           border: 'border-red-200'
-        };
+        }
       default:
         return {
           bg: 'bg-gray-100',
           text: 'text-gray-800',
           border: 'border-gray-200'
-        };
+        }
     }
-  };
+  }
 
   const leaveTypeColors: Record<LeaveRequest['leave_type'], string> = {
     '希望休': 'bg-blue-100 text-blue-800',
@@ -268,7 +188,7 @@ const LeavePage: React.FC = () => {
     '病欠': 'bg-red-100 text-red-800',
     'その他': 'bg-purple-100 text-purple-800',
     '出勤可能': 'bg-cyan-100 text-cyan-800'
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -444,7 +364,7 @@ const LeavePage: React.FC = () => {
                     <div className="font-semibold text-gray-800 mb-2">{dayData.day}</div>
                     <div className="space-y-1">
                       {dayData.leaves.map((leave) => {
-                        const styles = getStatusStyles(leave.status);
+                        const styles = getStatusStyles(leave.status)
                         return (
                           <button
                             key={leave.id}
@@ -462,7 +382,7 @@ const LeavePage: React.FC = () => {
                               {leave.leave_type}
                             </div>
                           </button>
-                        );
+                        )
                       })}
                     </div>
                   </>
@@ -489,7 +409,7 @@ const LeavePage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredLeaves.map((leave) => {
-                  const styles = getStatusStyles(leave.status);
+                  const styles = getStatusStyles(leave.status)
                   return (
                     <tr key={leave.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 text-sm text-gray-600">
@@ -552,7 +472,7 @@ const LeavePage: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  );
+                  )
                 })}
               </tbody>
             </table>
@@ -731,8 +651,8 @@ const LeavePage: React.FC = () => {
                 <div className="flex gap-3 pt-4 border-t border-gray-200">
                   <button
                     onClick={() => {
-                      approveLeave(selectedLeave.id);
-                      setSelectedLeave(null);
+                      approveLeave(selectedLeave.id)
+                      setSelectedLeave(null)
                     }}
                     className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
                   >
@@ -740,8 +660,8 @@ const LeavePage: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      rejectLeave(selectedLeave.id, '管理者による却下');
-                      setSelectedLeave(null);
+                      rejectLeave(selectedLeave.id, '管理者による却下')
+                      setSelectedLeave(null)
                     }}
                     className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
                   >
@@ -754,7 +674,7 @@ const LeavePage: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default LeavePage;
+export default LeavePage

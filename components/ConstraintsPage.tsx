@@ -1,7 +1,6 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-
+import React, { useState } from 'react'
 import { 
   Bot,
   Plus,
@@ -9,114 +8,82 @@ import {
   Trash2,
   Search,
   X
-} from 'lucide-react';
-
-// 型定義 - 新要件に合わせて簡略化
-interface BasicConstraint {
-  id: string;
-  name: string;
-  description: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+} from 'lucide-react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
+import type { Constraint } from '@/types'
 
 const ConstraintsPage: React.FC = () => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingConstraint, setEditingConstraint] = useState<BasicConstraint | null>(null);
-  const [searchText, setSearchText] = useState('');
+  // Contextからデータ取得（ローカル状態管理から変更）
+  const { constraints, addConstraint, updateConstraint } = useShiftData()
+  
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingConstraint, setEditingConstraint] = useState<Constraint | null>(null)
+  const [searchText, setSearchText] = useState('')
 
   // フォーム状態
   const [formData, setFormData] = useState({
     name: '',
     description: ''
-  });
-
-  // 基本的な制約条件（シンプル版）
-  const [constraints, setConstraints] = useState<BasicConstraint[]>([
-    {
-      id: '2',
-      name: '希望休優先',
-      description: '希望休の申請を最優先とする',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '6',
-      name: 'シフトパターン制約',
-      description: 'パターンC（▲）とパターンD（◆）は同日どちらか片方のみとする',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    }
-  ]);
+  })
 
   // フィルタリングされた制約
   const filteredConstraints = constraints.filter(constraint => {
     const matchesSearch = constraint.name.toLowerCase().includes(searchText.toLowerCase()) ||
-                         constraint.description.toLowerCase().includes(searchText.toLowerCase());
-    return matchesSearch && constraint.is_active;
-  }).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+                         constraint.description.toLowerCase().includes(searchText.toLowerCase())
+    return matchesSearch && constraint.is_active
+  }).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
 
   // モーダルを開く
-  const openModal = (constraint?: BasicConstraint) => {
+  const openModal = (constraint?: Constraint) => {
     if (constraint) {
-      setEditingConstraint(constraint);
+      setEditingConstraint(constraint)
       setFormData({
         name: constraint.name,
         description: constraint.description
-      });
+      })
     } else {
-      setEditingConstraint(null);
+      setEditingConstraint(null)
       setFormData({
         name: '',
         description: ''
-      });
+      })
     }
-    setIsModalOpen(true);
-  };
+    setIsModalOpen(true)
+  }
 
   // モーダルを閉じる
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingConstraint(null);
-  };
+    setIsModalOpen(false)
+    setEditingConstraint(null)
+  }
 
   // 制約を保存
   const saveConstraint = () => {
-    const now = new Date().toISOString();
+    const now = new Date().toISOString()
     
     if (editingConstraint) {
-      // 編集
-      setConstraints(prev => prev.map(constraint => 
-        constraint.id === editingConstraint.id
-          ? { ...constraint, ...formData, updated_at: now }
-          : constraint
-      ));
-    } else {
-      // 新規追加
-      const newConstraint: BasicConstraint = {
-        id: (constraints.length + 1).toString(),
+      // 編集（updateConstraint関数を使用）
+      updateConstraint(editingConstraint.id, {
         ...formData,
-        is_active: true,
-        created_at: now,
         updated_at: now
-      };
-      setConstraints(prev => [...prev, newConstraint]);
+      })
+    } else {
+      // 新規追加（addConstraint関数を使用）
+      addConstraint({
+        ...formData,
+        is_active: true
+      })
     }
     
-    closeModal();
-  };
+    closeModal()
+  }
 
-  // 制約を削除
+  // 制約を削除（論理削除：is_active: falseにする）
   const deleteConstraint = (id: string) => {
     if (confirm('この制約条件を削除しますか？')) {
-      setConstraints(prev => prev.map(constraint => 
-        constraint.id === id ? { ...constraint, is_active: false } : constraint
-      ));
+      updateConstraint(id, { is_active: false })
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -194,7 +161,7 @@ const ConstraintsPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          );
+          )
         })}
 
         {filteredConstraints.length === 0 && (
@@ -282,7 +249,7 @@ const ConstraintsPage: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default ConstraintsPage;
+export default ConstraintsPage

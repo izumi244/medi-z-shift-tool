@@ -1,362 +1,167 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react';
-
-// 型定義をローカルで定義
-type ShiftSymbol = '○' | '▲' | '◆' | '×' | '';
+import React, { useState } from 'react'
+import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
+import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
 
 interface ShiftAssignment {
-  symbol: ShiftSymbol;
-  patternId?: string;
-  reason?: string;
-}
-
-interface Employee {
-  id: string;
-  name: string;
-  type: string;
-  maxDaysPerWeek: number;
-  maxHoursPerMonth: number;
-  maxHoursPerWeek?: number;
-  availablePatterns: string[];
-  canWorkSaturday: boolean;
-}
-
-interface ShiftData {
-  [employeeId: string]: {
-    [day: number]: ShiftAssignment;
-  };
-}
-
-interface ShiftPattern {
-  id: string;
-  name: string;
-  symbol: ShiftSymbol;
-  startTime: string;
-  endTime: string;
-  workingHours: number;
-  applicableStaff: string[];
-  color: string;
+  symbol: ShiftSymbol
+  patternId?: string
+  reason?: string
 }
 
 const ShiftPage: React.FC = () => {
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 9, 1)); // 2025年10月
-  const [editMode, setEditMode] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingCell, setEditingCell] = useState<{employeeId: string, day: number, employeeName: string} | null>(null);
+  // Context からデータを取得（ローカル状態管理から変更）
+  const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
+  
+  const [currentDate, setCurrentDate] = useState(new Date(2025, 9, 1)) // 2025年10月
+  const [editMode, setEditMode] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingCell, setEditingCell] = useState<{employeeId: string, day: number, employeeName: string} | null>(null)
   
   const [editValues, setEditValues] = useState({
     symbol: '○' as ShiftSymbol,
     reason: ''
-  });
+  })
 
-  // 4名のスタッフ（パート・医療事務統一）
-  const employees: Employee[] = [
-    {
-      id: '1',
-      name: '富沢',
-      type: '週4日・月100h（短時間対応）',
-      maxDaysPerWeek: 4,
-      maxHoursPerMonth: 100,
-      maxHoursPerWeek: 26,
-      availablePatterns: ['1', '2', '3', '4'],
-      canWorkSaturday: true
-    },
-    {
-      id: '2',
-      name: '田中',
-      type: '週5日・月117h（フルタイム）',
-      maxDaysPerWeek: 5,
-      maxHoursPerMonth: 117,
-      availablePatterns: ['1', '2'],
-      canWorkSaturday: true
-    },
-    {
-      id: '3',
-      name: '桐山',
-      type: '週4日・月100h（土曜不可）',
-      maxDaysPerWeek: 4,
-      maxHoursPerMonth: 100,
-      availablePatterns: ['5'],
-      canWorkSaturday: false
-    },
-    {
-      id: '4',
-      name: 'ヘルプ',
-      type: '表示のみ（シフト組み込み対象外）',
-      maxDaysPerWeek: 0,
-      maxHoursPerMonth: 0,
-      availablePatterns: [],
-      canWorkSaturday: true
-    }
-  ];
-
-  // 5つのシフトパターン
-  const shiftPatterns: ShiftPattern[] = [
-    {
-      id: '1',
-      name: 'パターンA',
-      symbol: '○',
-      startTime: '09:00',
-      endTime: '18:00',
-      workingHours: 8,
-      applicableStaff: ['富沢', '田中'],
-      color: 'bg-blue-500'
-    },
-    {
-      id: '2',
-      name: 'パターンB',
-      symbol: '○',
-      startTime: '09:00',
-      endTime: '16:00',
-      workingHours: 6,
-      applicableStaff: ['富沢', '田中'],
-      color: 'bg-blue-400'
-    },
-    {
-      id: '3',
-      name: 'パターンC',
-      symbol: '▲',
-      startTime: '09:00',
-      endTime: '13:00',
-      workingHours: 4,
-      applicableStaff: ['富沢'],
-      color: 'bg-green-500'
-    },
-    {
-      id: '4',
-      name: 'パターンD',
-      symbol: '◆',
-      startTime: '14:00',
-      endTime: '18:00',
-      workingHours: 4,
-      applicableStaff: ['富沢'],
-      color: 'bg-purple-500'
-    },
-    {
-      id: '5',
-      name: 'パターンE',
-      symbol: '○',
-      startTime: '09:00',
-      endTime: '17:00',
-      workingHours: 7,
-      applicableStaff: ['桐山'],
-      color: 'bg-orange-500'
-    }
-  ];
-
-  // サンプルシフトデータ（2025年10月・水曜日曜休診、桐山土曜不可、週制限準拠）
-  const [shiftData, setShiftData] = useState<ShiftData>({
-    '1': { // 富沢（週4日・月100h）
-      2: { symbol: '▲', patternId: '3' },
-      3: { symbol: '○', patternId: '1' },
-      6: { symbol: '◆', patternId: '4' },
-      7: { symbol: '○', patternId: '1' },
-      9: { symbol: '▲', patternId: '3' },
-      10: { symbol: '○', patternId: '1' },
-      14: { symbol: '◆', patternId: '4' },
-      16: { symbol: '○', patternId: '2' },
-      17: { symbol: '▲', patternId: '3' },
-      21: { symbol: '○', patternId: '1' },
-      23: { symbol: '◆', patternId: '4' },
-      24: { symbol: '○', patternId: '1' },
-      28: { symbol: '▲', patternId: '3' },
-      30: { symbol: '○', patternId: '2' },
-      31: { symbol: '◆', patternId: '4' }
-    },
-    '2': { // 田中（週5日・月117h）
-      2: { symbol: '○', patternId: '1' },
-      3: { symbol: '○', patternId: '1' },
-      4: { symbol: '○', patternId: '2' }, // 土曜
-      6: { symbol: '○', patternId: '1' },
-      7: { symbol: '○', patternId: '1' },
-      9: { symbol: '○', patternId: '1' },
-      10: { symbol: '○', patternId: '1' },
-      11: { symbol: '○', patternId: '2' }, // 土曜
-      13: { symbol: '○', patternId: '1' },
-      14: { symbol: '○', patternId: '1' },
-      16: { symbol: '×', reason: '有給' },
-      17: { symbol: '○', patternId: '1' },
-      18: { symbol: '○', patternId: '2' }, // 土曜
-      20: { symbol: '○', patternId: '1' },
-      21: { symbol: '○', patternId: '1' },
-      23: { symbol: '○', patternId: '1' },
-      24: { symbol: '○', patternId: '1' },
-      25: { symbol: '○', patternId: '2' }, // 土曜
-      27: { symbol: '○', patternId: '1' },
-      28: { symbol: '○', patternId: '1' }
-    },
-    '3': { // 桐山（週4日・月100h・土曜不可）
-      2: { symbol: '○', patternId: '5' },
-      3: { symbol: '○', patternId: '5' },
-      6: { symbol: '○', patternId: '5' },
-      7: { symbol: '○', patternId: '5' },
-      9: { symbol: '○', patternId: '5' },
-      10: { symbol: '○', patternId: '5' },
-      13: { symbol: '○', patternId: '5' },
-      14: { symbol: '○', patternId: '5' },
-      16: { symbol: '○', patternId: '5' },
-      17: { symbol: '○', patternId: '5' },
-      20: { symbol: '×', reason: '希望休' },
-      21: { symbol: '○', patternId: '5' },
-      23: { symbol: '○', patternId: '5' },
-      24: { symbol: '○', patternId: '5' },
-      27: { symbol: '○', patternId: '5' },
-      28: { symbol: '○', patternId: '5' },
-      30: { symbol: '○', patternId: '5' },
-      31: { symbol: '○', patternId: '5' }
-    },
-    '4': { // ヘルプ（表示のみ）
-      6: { symbol: '×', reason: '休み' },
-      13: { symbol: '×', reason: '休み' },
-      20: { symbol: '×', reason: '休み' },
-      27: { symbol: '×', reason: '休み' }
-    }
-  });
-
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const monthName = currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+  const monthName = currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   // カレンダー日付生成
   const generateDays = () => {
-    const daysArray = [];
+    const daysArray = []
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const dayOfWeek = date.toLocaleDateString('ja-JP', { weekday: 'short' });
+      const date = new Date(year, month, day)
+      const dayOfWeek = date.toLocaleDateString('ja-JP', { weekday: 'short' })
       daysArray.push({ 
         day, 
         dayOfWeek, 
         isSaturday: dayOfWeek === '土', 
         isSunday: dayOfWeek === '日' 
-      });
+      })
     }
-    return daysArray;
-  };
-  const days = generateDays();
+    return daysArray
+  }
+  const days = generateDays()
 
   // セルクリック時の編集モーダル表示
   const handleCellClick = (employeeId: string, day: number, employeeName: string) => {
-    if (!editMode) return;
+    if (!editMode) return
 
-    const dayInfo = days[day - 1];
+    const dayInfo = days[day - 1]
 
     // 水曜日と日曜日はクリニック休診
     if (dayInfo?.dayOfWeek === '水' || dayInfo?.dayOfWeek === '日') {
-      alert('水曜日と日曜日はクリニック休診日です。');
-      return;
+      alert('水曜日と日曜日はクリニック休診日です。')
+      return
     }
 
     // ヘルプスタッフのシフト組み込み制限
     if (employeeName === 'ヘルプ') {
-      alert('ヘルプスタッフはシフト組み込み対象外です。×記号での表示のみ可能です。');
-      return;
+      alert('ヘルプスタッフはシフト組み込み対象外です。×記号での表示のみ可能です。')
+      return
     }
 
     // 桐山の土曜勤務制限チェック
     if (employeeName === '桐山' && dayInfo?.isSaturday) {
-      alert('桐山は土曜勤務不可です。');
-      return;
+      alert('桐山は土曜勤務不可です。')
+      return
     }
     
-    const shift = shiftData[employeeId]?.[day];
-    setEditingCell({employeeId, day, employeeName});
+    const shift = shiftData[employeeId]?.[day]
+    setEditingCell({employeeId, day, employeeName})
 
     setEditValues({
       symbol: shift?.symbol || '○',
       reason: shift?.reason || ''
-    });
-    setIsEditModalOpen(true);
-  };
+    })
+    setIsEditModalOpen(true)
+  }
 
   // 編集内容保存
   const handleSaveEdit = () => {
-    if (!editingCell) return;
-    const { employeeId, day } = editingCell;
+    if (!editingCell) return
+    const { employeeId, day } = editingCell
 
     const newShift: ShiftAssignment = {
       symbol: editValues.symbol,
       reason: editValues.symbol === '×' ? editValues.reason : undefined,
       patternId: getPatternIdFromSymbol(editValues.symbol, employeeId)
-    };
+    }
 
-    setShiftData(prev => ({
-      ...prev,
-      [employeeId]: {
-        ...prev[employeeId],
-        [day]: newShift
-      }
-    }));
+    // updateShift 関数を使用（setShiftData から変更）
+    updateShift(employeeId, day, newShift)
     
-    handleCloseModal();
-  };
+    handleCloseModal()
+  }
 
   // 記号からパターンIDを取得（動的に判定）
   const getPatternIdFromSymbol = (symbol: ShiftSymbol, employeeId: string): string | undefined => {
-    const employee = employees.find(e => e.id === employeeId);
-    if (!employee || symbol === '×') return undefined;
+    const employee = employees.find(e => e.id === employeeId)
+    if (!employee || symbol === '×') return undefined
 
     // 従業員名とシンボルに基づいてパターンを検索
     const matchingPatterns = shiftPatterns.filter(p => 
-      p.symbol === symbol && p.applicableStaff.includes(employee.name)
-    );
+      p.symbol === symbol && p.applicableStaff?.includes(employee.name)
+    )
 
     if (matchingPatterns.length > 0) {
       // 桐山の場合はパターンE、富沢の場合は記号に応じて選択
       if (employee.name === '桐山' && symbol === '○') {
-        return matchingPatterns.find(p => p.id === '5')?.id || matchingPatterns[0].id;
+        return matchingPatterns.find(p => p.id === '5')?.id || matchingPatterns[0].id
       }
-      if (symbol === '▲') return matchingPatterns.find(p => p.id === '3')?.id || matchingPatterns[0].id;
-      if (symbol === '◆') return matchingPatterns.find(p => p.id === '4')?.id || matchingPatterns[0].id;
+      if (symbol === '▲') return matchingPatterns.find(p => p.id === '3')?.id || matchingPatterns[0].id
+      if (symbol === '◆') return matchingPatterns.find(p => p.id === '4')?.id || matchingPatterns[0].id
       // ○の場合はパターンA（基本）
-      return matchingPatterns.find(p => p.id === '1')?.id || matchingPatterns[0].id;
+      return matchingPatterns.find(p => p.id === '1')?.id || matchingPatterns[0].id
     }
     
-    return undefined;
-  };
+    return undefined
+  }
 
   const handleCloseModal = () => {
-    setIsEditModalOpen(false);
-    setEditingCell(null);
-  };
+    setIsEditModalOpen(false)
+    setEditingCell(null)
+  }
 
   const changeMonth = (direction: 'prev' | 'next') => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(month + (direction === 'prev' ? -1 : 1));
-    setCurrentDate(newDate);
-  };
+    const newDate = new Date(currentDate)
+    newDate.setMonth(month + (direction === 'prev' ? -1 : 1))
+    setCurrentDate(newDate)
+  }
 
   // セル表示用のコンポーネント
   const renderShiftCell = (employee: Employee, day: number, dayInfo: { isSunday: boolean, isSaturday: boolean, dayOfWeek: string }) => {
-    const shift = shiftData[employee.id]?.[day];
-    const isClinicClosed = dayInfo.dayOfWeek === '水' || dayInfo.isSunday;
+    const shift = shiftData[employee.id]?.[day]
+    const isClinicClosed = dayInfo.dayOfWeek === '水' || dayInfo.isSunday
     
     const cellClass = `border-r border-gray-200 h-20 p-1 align-middle text-center ${
       isClinicClosed ? 'bg-gray-100' : 'bg-white'
-    } ${editMode && !isClinicClosed ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`;
+    } ${editMode && !isClinicClosed ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`
 
     if (!shift || !shift.symbol) {
-      return <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)} />;
+      return <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)} />
     }
 
     // 記号の色分け（パターンIDに基づく）
     const getSymbolColor = (symbol: ShiftSymbol, patternId?: string) => {
-      if (symbol === '×') return 'text-red-600 bg-red-100';
-      if (symbol === '▲') return 'text-green-600 bg-green-100';
-      if (symbol === '◆') return 'text-purple-600 bg-purple-100';
+      if (symbol === '×') return 'text-red-600 bg-red-100'
+      if (symbol === '▲') return 'text-green-600 bg-green-100'
+      if (symbol === '◆') return 'text-purple-600 bg-purple-100'
       if (symbol === '○') {
         // パターンIDに応じて色分け
-        if (patternId === '5') return 'text-orange-600 bg-orange-100'; // パターンE（桐山専用）
-        if (patternId === '2') return 'text-blue-400 bg-blue-50'; // パターンB（土曜）
-        return 'text-blue-600 bg-blue-100'; // パターンA（基本）
+        if (patternId === '5') return 'text-orange-600 bg-orange-100' // パターンE（桐山専用）
+        if (patternId === '2') return 'text-blue-400 bg-blue-50' // パターンB（土曜）
+        return 'text-blue-600 bg-blue-100' // パターンA（基本）
       }
-      return 'text-gray-600 bg-gray-100';
-    };
+      return 'text-gray-600 bg-gray-100'
+    }
 
-    const pattern = shiftPatterns.find(p => p.id === shift.patternId);
-    const timeInfo = pattern ? `${pattern.startTime}-${pattern.endTime}` : shift.reason || '';
+    const pattern = shiftPatterns.find(p => p.id === shift.patternId)
+    const timeInfo = pattern ? `${pattern.startTime}-${pattern.endTime}` : shift.reason || ''
 
     return (
       <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)}>
@@ -371,27 +176,36 @@ const ShiftPage: React.FC = () => {
           )}
         </div>
       </td>
-    );
-  };
+    )
+  }
 
   // 労働時間統計計算
   const calculateMonthlyStats = (employeeId: string) => {
-    const shifts = shiftData[employeeId] || {};
-    let totalDays = 0;
-    let totalHours = 0;
+    const shifts = shiftData[employeeId] || {}
+    let totalDays = 0
+    let totalHours = 0
 
     Object.values(shifts).forEach(shift => {
       if (shift.symbol !== '×' && shift.patternId) {
-        const pattern = shiftPatterns.find(p => p.id === shift.patternId);
+        const pattern = shiftPatterns.find(p => p.id === shift.patternId)
         if (pattern) {
-          totalDays++;
-          totalHours += pattern.workingHours;
+          totalDays++
+          totalHours += pattern.workingHours
         }
       }
-    });
+    })
 
-    return { totalDays, totalHours };
-  };
+    return { totalDays, totalHours }
+  }
+
+  // employee.type の代替表示文字列を生成（()内の文言を削除）
+  const getEmployeeTypeDisplay = (employee: Employee): string => {
+    if (employee.name === '富沢') return '週4日・月100h'
+    if (employee.name === '田中') return '週5日・月117h'
+    if (employee.name === '桐山') return '週4日・月100h'
+    if (employee.name === 'ヘルプ') return '表示のみ'
+    return `週${employee.max_days_per_week}日・月${employee.max_hours_per_month}h`
+  }
 
   return (
     <div className="space-y-6">
@@ -489,7 +303,7 @@ const ShiftPage: React.FC = () => {
                   スタッフ
                 </th>
                 {days.map(({ day, dayOfWeek, isSaturday, isSunday }) => {
-                  const isClinicClosed = dayOfWeek === '水' || isSunday;
+                  const isClinicClosed = dayOfWeek === '水' || isSunday
                   return (
                     <th key={day} className={`p-2 text-center font-medium text-gray-700 text-xs w-16 border-r border-gray-200 ${
                       isClinicClosed ? 'bg-gray-100' : 'bg-gray-50'
@@ -497,27 +311,23 @@ const ShiftPage: React.FC = () => {
                       <div className="font-bold">{day}</div>
                       <div className="text-xs">{dayOfWeek}</div>
                     </th>
-                  );
+                  )
                 })}
               </tr>
             </thead>
             <tbody>
               {employees.map(employee => {
-                const stats = calculateMonthlyStats(employee.id);
                 return (
                   <tr key={employee.id} className="border-b border-gray-200">
                     <td className="sticky left-0 bg-white border-r border-gray-200 p-3 z-10">
                       <div className="text-sm font-semibold text-gray-800">{employee.name}</div>
-                      <div className="text-xs text-gray-600">{employee.type}</div>
-                      <div className="text-xs text-indigo-600 mt-1">
-                        {stats.totalDays}日 / {stats.totalHours}h
-                      </div>
+                      <div className="text-xs text-gray-600">{getEmployeeTypeDisplay(employee)}</div>
                     </td>
                     {days.map(({ day, isSaturday, isSunday, dayOfWeek }) => 
                       renderShiftCell(employee, day, { isSaturday, isSunday, dayOfWeek })
                     )}
                   </tr>
-                );
+                )
               })}
             </tbody>
           </table>
@@ -544,10 +354,10 @@ const ShiftPage: React.FC = () => {
                 <div className="block text-sm font-semibold text-gray-700 mb-3">記号選択</div>
                 <div className="grid grid-cols-2 gap-3">
                   {['○', '▲', '◆', '×'].map((symbol) => {
-                    const employee = employees.find(e => e.id === editingCell.employeeId);
+                    const employee = employees.find(e => e.id === editingCell.employeeId)
                     const isDisabled = (
                       (symbol === '▲' || symbol === '◆') && employee?.name !== '富沢'
-                    );
+                    )
 
                     return (
                       <button
@@ -565,7 +375,7 @@ const ShiftPage: React.FC = () => {
                       >
                         <div className="text-2xl font-bold mb-1">{symbol}</div>
                       </button>
-                    );
+                    )
                   })}
                 </div>
               </div>
@@ -610,7 +420,7 @@ const ShiftPage: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default ShiftPage;
+export default ShiftPage

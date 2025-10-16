@@ -1,5 +1,6 @@
 import AuthGuard from '@/components/AuthGuard'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { ShiftDataProvider } from '@/contexts/ShiftDataContext'
 
 import './globals.css'
 
@@ -20,9 +21,11 @@ export default function RootLayout({
     <html lang="ja">
       <body className="antialiased">
         <AuthProvider>
-          <AuthGuard>
-            {children}
-          </AuthGuard>
+          <ShiftDataProvider>
+            <AuthGuard>
+              {children}
+            </AuthGuard>
+          </ShiftDataProvider>
         </AuthProvider>
       </body>
     </html>

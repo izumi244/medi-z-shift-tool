@@ -1,4 +1,4 @@
-// types/index.ts - 新要件対応版（修正）
+// types/index.ts - 認証システム対応版
 
 import { ReactNode } from 'react'
 
@@ -33,7 +33,7 @@ export interface ShiftPattern {
   color?: string             // 表示用カラー
 }
 
-// 従業員（制約フィールド追加）
+// 従業員（認証対応版）
 export interface Employee {
   id: string
   name: string
@@ -46,6 +46,12 @@ export interface Employee {
   max_days_per_week: number     // 週最大勤務日数
   max_hours_per_month: number   // 月最大労働時間（16日-15日）
   max_hours_per_week?: number   // 週最大労働時間（富沢の26時間制限）
+  
+// 認証関連フィールド（データベースに合わせてnull許容）
+user_id?: string | null
+employee_number?: string | null
+password_changed?: boolean | null
+is_system_account?: boolean | null
   
   phone?: string
   email?: string
@@ -100,6 +106,14 @@ export interface Constraint {
   name: string
   description: string
   is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// 従業員番号採番テーブル（新規追加）
+export interface EmployeeSequence {
+  id: number
+  last_number: number
   created_at: string
   updated_at: string
 }
@@ -261,6 +275,29 @@ export interface LoginCredentials {
   user_id: string
   password: string
   remember_me: boolean
+}
+
+// 認証状態
+export interface AuthState {
+  isAuthenticated: boolean
+  user: User | null
+  loading: boolean
+  error: string | null
+}
+
+// 従業員登録時のアカウント情報
+export interface EmployeeAccountInfo {
+  employee_id: string
+  employee_number: string
+  initial_password: string
+  created_at: string
+}
+
+// パスワード変更フォーム
+export interface PasswordChangeForm {
+  current_password: string
+  new_password: string
+  confirm_password: string
 }
 
 // ==================== 新要件専用型定義 ====================

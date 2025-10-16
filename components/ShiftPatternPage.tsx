@@ -1,195 +1,140 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-import { Clock, Plus, Edit, Trash2, Users, X, Save, AlertTriangle } from 'lucide-react';
-
-// 型定義をローカルで定義
-type ShiftSymbol = '○' | '▲' | '◆' | '✕' | '■' | '▶';
-
-interface ShiftPattern {
-  id: string;
-  name: string;
-  start_time: string;
-  end_time: string;
-  break_minutes: number;
-  symbol: ShiftSymbol;
-  applicable_staff?: string[];
-}
+import React, { useState } from 'react'
+import { Clock, Plus, Edit, Trash2, Users, X, Save, AlertTriangle } from 'lucide-react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
+import type { ShiftPattern, ShiftSymbol } from '@/types'
 
 const ShiftPatternPage: React.FC = () => {
+  // Contextからデータ取得
+  const { shiftPatterns, addShiftPattern, updateShiftPattern, deleteShiftPattern } = useShiftData()
+  
   // 状態管理
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [editingPattern, setEditingPattern] = useState<ShiftPattern | null>(null);
-  const [deletingPattern, setDeletingPattern] = useState<ShiftPattern | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [editingPattern, setEditingPattern] = useState<ShiftPattern | null>(null)
+  const [deletingPattern, setDeletingPattern] = useState<ShiftPattern | null>(null)
   
   // 利用可能な記号リスト（6種類）
-  const [availableSymbols, setAvailableSymbols] = useState<ShiftSymbol[]>(['○', '▲', '◆', '✕', '■', '▶']);
+  const availableSymbols: ShiftSymbol[] = ['○', '▲', '◆', '✕', '■', '▶']
   
   // フォームデータ
   const [formData, setFormData] = useState({
     name: '',
-    start_time: '',
-    end_time: '',
-    break_minutes: 60,
+    startTime: '',
+    endTime: '',
+    workingHours: 0,
+    breakMinutes: 60,
     symbol: '○' as ShiftSymbol,
-    applicable_staff: [] as string[]
-  });
-
-  // パターンデータ（状態管理）
-  const [patterns, setPatterns] = useState<ShiftPattern[]>([
-    {
-      id: '1',
-      name: 'パターンA',
-      start_time: '09:00',
-      end_time: '18:00',
-      break_minutes: 60,
-      symbol: '○' as ShiftSymbol,
-      applicable_staff: ['富沢', '田中']
-    },
-    {
-      id: '2', 
-      name: 'パターンB',
-      start_time: '09:00',
-      end_time: '16:00',
-      break_minutes: 60,
-      symbol: '○' as ShiftSymbol,
-      applicable_staff: ['富沢', '田中']
-    },
-    {
-      id: '3',
-      name: 'パターンC',
-      start_time: '09:00',
-      end_time: '13:00',
-      break_minutes: 0,
-      symbol: '▲' as ShiftSymbol,
-      applicable_staff: ['富沢']
-    },
-    {
-      id: '4',
-      name: 'パターンD', 
-      start_time: '14:00',
-      end_time: '18:00',
-      break_minutes: 0,
-      symbol: '◆' as ShiftSymbol,
-      applicable_staff: ['富沢']
-    },
-    {
-      id: '5',
-      name: 'パターンE',
-      start_time: '09:00',
-      end_time: '17:00',
-      break_minutes: 60,
-      symbol: '○' as ShiftSymbol,
-      applicable_staff: ['桐山']
-    }
-  ]);
+    applicableStaff: [] as string[]
+  })
 
   // スタッフリスト
-  const allStaff = ['富沢', '田中', '桐山', 'ヘルプ'];
+  const allStaff = ['富沢', '田中', '桐山', 'ヘルプ']
 
   // 記号の色設定（6種類）
   const getSymbolColor = (symbol: ShiftSymbol): string => {
-    const colors = {
+    const colors: Record<ShiftSymbol, string> = {
       '○': 'bg-blue-100 text-blue-800',
       '▲': 'bg-green-100 text-green-800', 
       '◆': 'bg-purple-100 text-purple-800',
+      '×': 'bg-red-100 text-red-800',
       '✕': 'bg-orange-100 text-orange-800',
       '■': 'bg-gray-100 text-gray-800',
       '▶': 'bg-yellow-100 text-yellow-800'
-    };
-    return colors[symbol] || 'bg-gray-100 text-gray-800';
-  };
+    }
+    return colors[symbol] || 'bg-gray-100 text-gray-800'
+  }
 
   // 編集モーダルを開く
   const handleEdit = (pattern: ShiftPattern) => {
-    setEditingPattern(pattern);
+    setEditingPattern(pattern)
     setFormData({
       name: pattern.name,
-      start_time: pattern.start_time,
-      end_time: pattern.end_time,
-      break_minutes: pattern.break_minutes,
+      startTime: pattern.startTime,
+      endTime: pattern.endTime,
+      workingHours: pattern.workingHours,
+      breakMinutes: pattern.breakMinutes || 60,
       symbol: pattern.symbol,
-      applicable_staff: pattern.applicable_staff || []
-    });
-    setIsEditModalOpen(true);
-  };
+      applicableStaff: pattern.applicableStaff || []
+    })
+    setIsEditModalOpen(true)
+  }
 
   // 新規パターン作成
   const handleAdd = () => {
-    setEditingPattern(null);
+    setEditingPattern(null)
     setFormData({
       name: '',
-      start_time: '09:00',
-      end_time: '18:00',
-      break_minutes: 60,
+      startTime: '09:00',
+      endTime: '18:00',
+      workingHours: 8,
+      breakMinutes: 60,
       symbol: availableSymbols[0],
-      applicable_staff: []
-    });
-    setIsEditModalOpen(true);
-  };
+      applicableStaff: []
+    })
+    setIsEditModalOpen(true)
+  }
 
   // 削除確認モーダルを開く
   const handleDeleteConfirm = (pattern: ShiftPattern) => {
-    setDeletingPattern(pattern);
-    setIsDeleteModalOpen(true);
-  };
+    setDeletingPattern(pattern)
+    setIsDeleteModalOpen(true)
+  }
 
   // パターン削除実行
   const handleDelete = () => {
     if (deletingPattern) {
-      setPatterns(prev => prev.filter(p => p.id !== deletingPattern.id));
-      setIsDeleteModalOpen(false);
-      setDeletingPattern(null);
+      deleteShiftPattern(deletingPattern.id)
+      setIsDeleteModalOpen(false)
+      setDeletingPattern(null)
     }
-  };
+  }
 
   // 保存処理
   const handleSave = () => {
-    if (!formData.name || !formData.start_time || !formData.end_time) {
-      alert('必須項目を入力してください');
-      return;
+    if (!formData.name || !formData.startTime || !formData.endTime) {
+      alert('必須項目を入力してください')
+      return
     }
-
-    const newPattern: ShiftPattern = {
-      id: editingPattern?.id || Date.now().toString(),
-      name: formData.name,
-      start_time: formData.start_time,
-      end_time: formData.end_time,
-      break_minutes: formData.break_minutes,
-      symbol: formData.symbol,
-      applicable_staff: formData.applicable_staff
-    };
 
     if (editingPattern) {
       // 編集
-      setPatterns(prev => prev.map(p => p.id === editingPattern.id ? newPattern : p));
+      updateShiftPattern(editingPattern.id, {
+        name: formData.name,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        workingHours: formData.workingHours,
+        breakMinutes: formData.breakMinutes,
+        symbol: formData.symbol,
+        applicableStaff: formData.applicableStaff
+      })
     } else {
       // 新規追加
-      setPatterns(prev => [...prev, newPattern]);
+      addShiftPattern({
+        name: formData.name,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        workingHours: formData.workingHours,
+        breakMinutes: formData.breakMinutes,
+        symbol: formData.symbol,
+        applicableStaff: formData.applicableStaff
+      })
     }
 
-    setIsEditModalOpen(false);
-    setEditingPattern(null);
-  };
+    setIsEditModalOpen(false)
+    setEditingPattern(null)
+  }
 
   // スタッフ選択切り替え
   const toggleStaff = (staff: string) => {
     setFormData(prev => ({
       ...prev,
-      applicable_staff: prev.applicable_staff.includes(staff)
-        ? prev.applicable_staff.filter(s => s !== staff)
-        : [...prev.applicable_staff, staff]
-    }));
-  };
-
-  // 労働時間計算
-  const calculateWorkingHours = (startTime: string, endTime: string, breakMinutes: number): number => {
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-    const totalMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin) - breakMinutes;
-    return Math.round(totalMinutes / 60 * 10) / 10;
-  };
+      applicableStaff: prev.applicableStaff.includes(staff)
+        ? prev.applicableStaff.filter(s => s !== staff)
+        : [...prev.applicableStaff, staff]
+    }))
+  }
 
   return (
     <div className="space-y-8">
@@ -214,9 +159,7 @@ const ShiftPatternPage: React.FC = () => {
 
       {/* パターンカード一覧 */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {patterns.map((pattern) => {
-          const workingHours = calculateWorkingHours(pattern.start_time, pattern.end_time, pattern.break_minutes);
-          
+        {shiftPatterns.map((pattern) => {
           return (
             <div key={pattern.id} className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
               {/* カードヘッダー */}
@@ -246,10 +189,10 @@ const ShiftPatternPage: React.FC = () => {
                   <div className="text-gray-700">
                     <div className="flex items-center gap-2 text-lg font-semibold">
                       <Clock className="w-4 h-4" />
-                      {pattern.start_time} - {pattern.end_time}
+                      {pattern.startTime} - {pattern.endTime}
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
-                      実労働時間: {workingHours}時間 （休憩{pattern.break_minutes}分）
+                      実労働時間: {pattern.workingHours}時間 （休憩{pattern.breakMinutes || 0}分）
                     </div>
                   </div>
 
@@ -266,7 +209,7 @@ const ShiftPatternPage: React.FC = () => {
                     <span className="text-sm font-semibold text-gray-700">適用可能スタッフ</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(pattern.applicable_staff || []).map((staff, index) => (
+                    {(pattern.applicableStaff || []).map((staff, index) => (
                       <span
                         key={index}
                         className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium"
@@ -281,14 +224,14 @@ const ShiftPatternPage: React.FC = () => {
               {/* パターン詳細 */}
               <div className="bg-gray-50 p-4 border-t border-gray-200">
                 <div className="grid grid-cols-2 gap-4 text-xs text-gray-600">
-                  <div><span className="font-medium">開始:</span> {pattern.start_time}</div>
-                  <div><span className="font-medium">終了:</span> {pattern.end_time}</div>
+                  <div><span className="font-medium">開始:</span> {pattern.startTime}</div>
+                  <div><span className="font-medium">終了:</span> {pattern.endTime}</div>
                   <div><span className="font-medium">記号:</span> {pattern.symbol}</div>
                   <div><span className="font-medium">ID:</span> {pattern.id}</div>
                 </div>
               </div>
             </div>
-          );
+          )
         })}
       </div>
 
@@ -329,8 +272,8 @@ const ShiftPatternPage: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">開始時間</label>
                   <input
                     type="time"
-                    value={formData.start_time}
-                    onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
+                    value={formData.startTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
                     className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                   />
                 </div>
@@ -338,11 +281,25 @@ const ShiftPatternPage: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">終了時間</label>
                   <input
                     type="time"
-                    value={formData.end_time}
-                    onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
+                    value={formData.endTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
                     className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                   />
                 </div>
+              </div>
+
+              {/* 実労働時間 */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">実労働時間（時間）</label>
+                <input
+                  type="number"
+                  value={formData.workingHours}
+                  onChange={(e) => setFormData(prev => ({ ...prev, workingHours: parseFloat(e.target.value) }))}
+                  className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+                  min="0"
+                  max="24"
+                  step="0.5"
+                />
               </div>
 
               {/* 休憩時間 */}
@@ -350,8 +307,8 @@ const ShiftPatternPage: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">休憩時間（分）</label>
                 <input
                   type="number"
-                  value={formData.break_minutes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, break_minutes: parseInt(e.target.value) }))}
+                  value={formData.breakMinutes}
+                  onChange={(e) => setFormData(prev => ({ ...prev, breakMinutes: parseInt(e.target.value) }))}
                   className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                   min="0"
                   step="15"
@@ -388,7 +345,7 @@ const ShiftPatternPage: React.FC = () => {
                     <label key={staff} className="flex items-center gap-3 p-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-indigo-500 transition-colors">
                       <input
                         type="checkbox"
-                        checked={formData.applicable_staff.includes(staff)}
+                        checked={formData.applicableStaff.includes(staff)}
                         onChange={() => toggleStaff(staff)}
                         className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                       />
@@ -397,15 +354,6 @@ const ShiftPatternPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-
-              {/* 計算された労働時間表示 */}
-              {formData.start_time && formData.end_time && (
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <div className="text-sm text-gray-600">
-                    <strong>実労働時間:</strong> {calculateWorkingHours(formData.start_time, formData.end_time, formData.break_minutes)}時間
-                  </div>
-                </div>
-              )}
 
               {/* ボタン */}
               <div className="flex gap-3 pt-4 border-t border-gray-200">
@@ -462,7 +410,7 @@ const ShiftPatternPage: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default ShiftPatternPage;
+export default ShiftPatternPage

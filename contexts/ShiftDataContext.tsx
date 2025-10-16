@@ -1,7 +1,13 @@
 'use client'
 
-import React, { createContext, useContext, useState, ReactNode } from 'react'
-import type { ShiftPattern, Employee, LeaveRequest } from '@/types'
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { ShiftPattern, Employee, LeaveRequest, EmployeeAccountInfo } from '@/types'
+import { 
+  generateEmployeeNumber, 
+  generateUniquePassword, 
+  createEmployeeAccount  // ← 正しい関数名に修正
+} from '@/lib/auth-utils'
 
 // シフトデータの型定義
 type ShiftSymbol = '○' | '▲' | '◆' | '×' | '✕' | '■' | '▶'
@@ -36,10 +42,10 @@ interface ShiftDataContextType {
   updateShiftPattern: (id: string, pattern: Partial<ShiftPattern>) => void
   deleteShiftPattern: (id: string) => void
   
-  // 従業員情報
+  // 従業員情報（戻り値の型を変更）
   employees: Employee[]
   setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>
-  addEmployee: (employee: Omit<Employee, 'id' | 'is_active' | 'created_at' | 'updated_at'>) => void
+  addEmployee: (employee: Omit<Employee, 'id' | 'is_active' | 'created_at' | 'updated_at' | 'user_id' | 'employee_number' | 'password_changed'>) => Promise<EmployeeAccountInfo>
   updateEmployee: (id: string, employee: Partial<Employee>) => void
   deleteEmployee: (id: string) => void
   
@@ -68,332 +74,467 @@ const ShiftDataContext = createContext<ShiftDataContextType | undefined>(undefin
 // Provider コンポーネント
 export function ShiftDataProvider({ children }: { children: ReactNode }) {
   // ============ シフトパターン ============
-  const [shiftPatterns, setShiftPatterns] = useState<ShiftPattern[]>([
-    {
-      id: '1',
-      name: 'パターンA',
-      symbol: '○',
-      startTime: '09:00',
-      endTime: '18:00',
-      workingHours: 8,
-      breakMinutes: 60,
-      applicableStaff: ['富沢', '田中'],
-      color: 'bg-blue-500'
-    },
-    {
-      id: '2',
-      name: 'パターンB',
-      symbol: '○',
-      startTime: '09:00',
-      endTime: '16:00',
-      workingHours: 6,
-      breakMinutes: 60,
-      applicableStaff: ['富沢', '田中'],
-      color: 'bg-blue-400'
-    },
-    {
-      id: '3',
-      name: 'パターンC',
-      symbol: '▲',
-      startTime: '09:00',
-      endTime: '13:00',
-      workingHours: 4,
-      breakMinutes: 0,
-      applicableStaff: ['富沢'],
-      color: 'bg-green-500'
-    },
-    {
-      id: '4',
-      name: 'パターンD',
-      symbol: '◆',
-      startTime: '14:00',
-      endTime: '18:00',
-      workingHours: 4,
-      breakMinutes: 0,
-      applicableStaff: ['富沢'],
-      color: 'bg-purple-500'
-    },
-    {
-      id: '5',
-      name: 'パターンE',
-      symbol: '○',
-      startTime: '09:00',
-      endTime: '17:00',
-      workingHours: 7,
-      breakMinutes: 60,
-      applicableStaff: ['桐山'],
-      color: 'bg-orange-500'
-    }
-  ])
+  const [shiftPatterns, setShiftPatterns] = useState<ShiftPattern[]>([])
 
-  const addShiftPattern = (pattern: Omit<ShiftPattern, 'id'>) => {
-    const newPattern = {
-      ...pattern,
-      id: (shiftPatterns.length + 1).toString()
+  // Supabaseからシフトパターンを取得
+  const fetchShiftPatterns = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shift_patterns')
+        .select('*')
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      
+      // Supabaseの型からアプリの型に変換
+      const patterns: ShiftPattern[] = (data || []).map(pattern => ({
+        id: pattern.id,
+        name: pattern.name,
+        symbol: pattern.symbol as ShiftSymbol,
+        startTime: pattern.start_time,
+        endTime: pattern.end_time,
+        workingHours: pattern.work_minutes / 60,
+        breakMinutes: pattern.break_minutes,
+        applicableStaff: [],
+        color: 'bg-blue-500'
+      }))
+      
+      setShiftPatterns(patterns)
+    } catch (error) {
+      console.error('シフトパターン取得エラー:', error)
     }
-    setShiftPatterns(prev => [...prev, newPattern])
   }
 
-  const updateShiftPattern = (id: string, pattern: Partial<ShiftPattern>) => {
-    setShiftPatterns(prev =>
-      prev.map(p => (p.id === id ? { ...p, ...pattern } : p))
-    )
+  const addShiftPattern = async (pattern: Omit<ShiftPattern, 'id'>) => {
+    try {
+      const { data, error } = await supabase
+        .from('shift_patterns')
+        .insert({
+          symbol: pattern.symbol,
+          name: pattern.name,
+          start_time: pattern.startTime,
+          end_time: pattern.endTime,
+          work_minutes: pattern.workingHours * 60,
+          break_minutes: pattern.breakMinutes || 0
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      if (data) {
+        const newPattern: ShiftPattern = {
+          id: data.id,
+          name: data.name,
+          symbol: data.symbol as ShiftSymbol,
+          startTime: data.start_time,
+          endTime: data.end_time,
+          workingHours: data.work_minutes / 60,
+          breakMinutes: data.break_minutes,
+          applicableStaff: pattern.applicableStaff,
+          color: pattern.color
+        }
+        setShiftPatterns(prev => [...prev, newPattern])
+      }
+    } catch (error) {
+      console.error('シフトパターン追加エラー:', error)
+    }
   }
 
-  const deleteShiftPattern = (id: string) => {
-    setShiftPatterns(prev => prev.filter(p => p.id !== id))
+  const updateShiftPattern = async (id: string, pattern: Partial<ShiftPattern>) => {
+    try {
+      const updates: any = {}
+      if (pattern.symbol) updates.symbol = pattern.symbol
+      if (pattern.name) updates.name = pattern.name
+      if (pattern.startTime) updates.start_time = pattern.startTime
+      if (pattern.endTime) updates.end_time = pattern.endTime
+      if (pattern.workingHours !== undefined) updates.work_minutes = pattern.workingHours * 60
+      if (pattern.breakMinutes !== undefined) updates.break_minutes = pattern.breakMinutes
+
+      const { error } = await supabase
+        .from('shift_patterns')
+        .update(updates)
+        .eq('id', id)
+
+      if (error) throw error
+      
+      setShiftPatterns(prev =>
+        prev.map(p => (p.id === id ? { ...p, ...pattern } : p))
+      )
+    } catch (error) {
+      console.error('シフトパターン更新エラー:', error)
+    }
+  }
+
+  const deleteShiftPattern = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('shift_patterns')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      setShiftPatterns(prev => prev.filter(p => p.id !== id))
+    } catch (error) {
+      console.error('シフトパターン削除エラー:', error)
+    }
   }
 
   // ============ 従業員情報 ============
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: '1',
-      name: '富沢',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      max_days_per_week: 4,
-      max_hours_per_month: 100,
-      max_hours_per_week: 26,
-      available_days: ['月', '火', '水', '木', '金', '土'],
-      assignable_shift_pattern_ids: ['1', '2', '3', '4'],
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '2',
-      name: '田中',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      max_days_per_week: 5,
-      max_hours_per_month: 117,
-      available_days: ['月', '火', '水', '木', '金', '土'],
-      assignable_shift_pattern_ids: ['1', '2'],
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '3',
-      name: '桐山',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      max_days_per_week: 4,
-      max_hours_per_month: 100,
-      available_days: ['月', '火', '水', '木', '金'],
-      assignable_shift_pattern_ids: ['5'],
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '4',
-      name: 'ヘルプ',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      max_days_per_week: 0,
-      max_hours_per_month: 0,
-      available_days: [],
-      assignable_shift_pattern_ids: [],
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    }
-  ])
+  const [employees, setEmployees] = useState<Employee[]>([])
 
-  const addEmployee = (employeeData: Omit<Employee, 'id' | 'is_active' | 'created_at' | 'updated_at'>) => {
-    const newEmployee: Employee = {
-      ...employeeData,
-      id: Date.now().toString(),
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+  // Supabaseから従業員を取得（システムアカウント対応版）
+  const fetchEmployees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')  // is_system_account フィールドも含めて全て取得
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      
+      // Supabaseの型からアプリの型に変換
+      const employeeData: Employee[] = (data || []).map(emp => ({
+        id: emp.id,
+        name: emp.name,
+        employment_type: emp.employment_type as '常勤' | 'パート',
+        job_type: emp.job_type as '看護師' | '臨床検査技師' | '医療事務',
+        max_days_per_week: emp.max_days_per_week,
+        max_hours_per_month: emp.max_hours_per_month,
+        available_days: [],
+        assignable_shift_pattern_ids: [],
+        
+        // 認証関連フィールド（null を適切に処理）
+        employee_number: emp.employee_number ? emp.employee_number : undefined,
+        password_changed: emp.password_changed ? emp.password_changed : false,
+        is_system_account: emp.is_system_account ? emp.is_system_account : false,  // システムアカウント判定
+        
+        is_active: true,
+        created_at: emp.created_at,
+        updated_at: emp.updated_at
+      }))
+      
+      setEmployees(employeeData)
+    } catch (error) {
+      console.error('従業員取得エラー:', error)
     }
-    setEmployees(prev => [...prev, newEmployee])
   }
 
-  const updateEmployee = (id: string, employee: Partial<Employee>) => {
-    setEmployees(prev =>
-      prev.map(e => (e.id === id ? { ...e, ...employee, updated_at: new Date().toISOString() } : e))
-    )
-  }
-
-  const deleteEmployee = (id: string) => {
-    setEmployees(prev => prev.filter(e => e.id !== id))
-  }
-
-  // ============ シフトデータ（2025年10月専用） ============
-  const [shiftData, setShiftData] = useState<ShiftData>({
-    '1': { // 富沢
-      2: { symbol: '▲', patternId: '3' },
-      3: { symbol: '○', patternId: '1' },
-      6: { symbol: '◆', patternId: '4' },
-      7: { symbol: '○', patternId: '1' },
-      9: { symbol: '▲', patternId: '3' },
-      10: { symbol: '○', patternId: '1' },
-      14: { symbol: '◆', patternId: '4' },
-      16: { symbol: '○', patternId: '2' },
-      17: { symbol: '▲', patternId: '3' },
-      21: { symbol: '○', patternId: '1' },
-      23: { symbol: '◆', patternId: '4' },
-      24: { symbol: '○', patternId: '1' },
-      28: { symbol: '▲', patternId: '3' },
-      30: { symbol: '○', patternId: '2' },
-      31: { symbol: '◆', patternId: '4' }
-    },
-    '2': { // 田中
-      2: { symbol: '○', patternId: '1' },
-      3: { symbol: '○', patternId: '1' },
-      4: { symbol: '○', patternId: '2' },
-      6: { symbol: '○', patternId: '1' },
-      7: { symbol: '○', patternId: '1' },
-      9: { symbol: '○', patternId: '1' },
-      10: { symbol: '○', patternId: '1' },
-      11: { symbol: '○', patternId: '2' },
-      13: { symbol: '○', patternId: '1' },
-      14: { symbol: '○', patternId: '1' },
-      16: { symbol: '×', reason: '有給' },
-      17: { symbol: '○', patternId: '1' },
-      18: { symbol: '○', patternId: '2' },
-      20: { symbol: '○', patternId: '1' },
-      21: { symbol: '○', patternId: '1' },
-      23: { symbol: '○', patternId: '1' },
-      24: { symbol: '○', patternId: '1' },
-      25: { symbol: '○', patternId: '2' },
-      27: { symbol: '○', patternId: '1' },
-      28: { symbol: '○', patternId: '1' }
-    },
-    '3': { // 桐山
-      2: { symbol: '○', patternId: '5' },
-      3: { symbol: '○', patternId: '5' },
-      6: { symbol: '○', patternId: '5' },
-      7: { symbol: '○', patternId: '5' },
-      9: { symbol: '○', patternId: '5' },
-      10: { symbol: '○', patternId: '5' },
-      13: { symbol: '○', patternId: '5' },
-      14: { symbol: '○', patternId: '5' },
-      16: { symbol: '○', patternId: '5' },
-      17: { symbol: '○', patternId: '5' },
-      20: { symbol: '×', reason: '希望休' },
-      21: { symbol: '○', patternId: '5' },
-      23: { symbol: '○', patternId: '5' },
-      24: { symbol: '○', patternId: '5' },
-      27: { symbol: '○', patternId: '5' },
-      28: { symbol: '○', patternId: '5' },
-      30: { symbol: '○', patternId: '5' },
-      31: { symbol: '○', patternId: '5' }
-    },
-    '4': { // ヘルプ
-      6: { symbol: '×', reason: '休み' },
-      13: { symbol: '×', reason: '休み' },
-      20: { symbol: '×', reason: '休み' },
-      27: { symbol: '×', reason: '休み' }
+  const addEmployee = async (employeeData: Omit<Employee, 'id' | 'is_active' | 'created_at' | 'updated_at' | 'user_id' | 'employee_number' | 'password_changed'>): Promise<EmployeeAccountInfo> => {
+    try {
+      // 独自認証システムでアカウント作成
+      const accountInfo = await createEmployeeAccount({
+        name: employeeData.name,
+        employment_type: employeeData.employment_type,
+        job_type: employeeData.job_type,
+        max_days_per_week: employeeData.max_days_per_week,
+        max_hours_per_month: employeeData.max_hours_per_month
+      })
+      
+      // Supabaseからデータを再取得して状態を更新
+      await fetchEmployees()
+      
+      return accountInfo
+    } catch (error) {
+      console.error('従業員追加エラー:', error)
+      throw error
     }
-  })
+  }
 
-  const updateShift = (employeeId: string, day: number, shift: ShiftAssignment) => {
-    setShiftData(prev => ({
-      ...prev,
-      [employeeId]: {
-        ...prev[employeeId],
-        [day]: shift
-      }
-    }))
+  const updateEmployee = async (id: string, employee: Partial<Employee>) => {
+    try {
+      const updates: any = {}
+      if (employee.name) updates.name = employee.name
+      if (employee.employment_type) updates.employment_type = employee.employment_type
+      if (employee.job_type) updates.job_type = employee.job_type
+      if (employee.max_days_per_week !== undefined) updates.max_days_per_week = employee.max_days_per_week
+      if (employee.max_hours_per_month !== undefined) updates.max_hours_per_month = employee.max_hours_per_month
+      if (employee.employee_number) updates.employee_number = employee.employee_number
+      if (employee.password_changed !== undefined) updates.password_changed = employee.password_changed
+      if (employee.is_system_account !== undefined) updates.is_system_account = employee.is_system_account
+      
+      updates.updated_at = new Date().toISOString()
+
+      const { error } = await supabase
+        .from('employees')
+        .update(updates)
+        .eq('id', id)
+
+      if (error) throw error
+      
+      setEmployees(prev =>
+        prev.map(e => (e.id === id ? { ...e, ...employee, updated_at: new Date().toISOString() } : e))
+      )
+    } catch (error) {
+      console.error('従業員更新エラー:', error)
+    }
+  }
+
+  const deleteEmployee = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      setEmployees(prev => prev.filter(e => e.id !== id))
+    } catch (error) {
+      console.error('従業員削除エラー:', error)
+    }
+  }
+
+  // ============ シフトデータ ============
+  const [shiftData, setShiftData] = useState<ShiftData>({})
+
+  // Supabaseからシフトデータを取得
+  const fetchShifts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .order('date', { ascending: true })
+
+      if (error) throw error
+      
+      // データを整形
+      const shiftMap: ShiftData = {}
+      data?.forEach(shift => {
+        const date = new Date(shift.date)
+        const day = date.getDate()
+        
+        if (!shiftMap[shift.employee_id]) {
+          shiftMap[shift.employee_id] = {}
+        }
+        
+        shiftMap[shift.employee_id][day] = {
+          symbol: shift.shift_symbol as ShiftSymbol,
+          patternId: undefined,
+          reason: undefined
+        }
+      })
+      
+      setShiftData(shiftMap)
+    } catch (error) {
+      console.error('シフトデータ取得エラー:', error)
+    }
+  }
+
+  const updateShift = async (employeeId: string, day: number, shift: ShiftAssignment) => {
+    try {
+      const date = `2025-10-${day.toString().padStart(2, '0')}`
+      
+      const { error } = await supabase
+        .from('shifts')
+        .upsert({
+          employee_id: employeeId,
+          date: date,
+          shift_symbol: shift.symbol,
+          updated_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+      
+      setShiftData(prev => ({
+        ...prev,
+        [employeeId]: {
+          ...prev[employeeId],
+          [day]: shift
+        }
+      }))
+    } catch (error) {
+      console.error('シフト更新エラー:', error)
+    }
   }
 
   // ============ 希望休データ ============
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([
-    {
-      id: '1',
-      employee_id: '1',
-      date: '2025-10-20',
-      leave_type: '希望休',
-      reason: '家族の用事',
-      status: '申請中',
-      created_at: '2025-10-01T09:00:00Z',
-      updated_at: '2025-10-01T09:00:00Z'
-    },
-    {
-      id: '2',
-      employee_id: '2',
-      date: '2025-10-16',
-      leave_type: '有給',
-      reason: '旅行',
-      status: '承認',
-      created_at: '2025-09-25T14:30:00Z',
-      updated_at: '2025-09-26T10:15:00Z',
-      approved_by: 'admin',
-      approved_at: '2025-09-26T10:15:00Z'
-    },
-    {
-      id: '3',
-      employee_id: '3',
-      date: '2025-10-20',
-      leave_type: '希望休',
-      reason: '私用',
-      status: '承認',
-      created_at: '2025-10-05T16:45:00Z',
-      updated_at: '2025-10-06T09:20:00Z',
-      approved_by: 'admin',
-      approved_at: '2025-10-06T09:20:00Z'
-    }
-  ])
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([])
 
-  const addLeaveRequest = (request: Omit<LeaveRequest, 'id' | 'created_at' | 'updated_at'>) => {
-    const newRequest: LeaveRequest = {
-      ...request,
-      id: (leaveRequests.length + 1).toString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+  // Supabaseから希望休を取得
+  const fetchLeaveRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('leave_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      
+      const requests: LeaveRequest[] = (data || []).map(req => ({
+        id: req.id,
+        employee_id: req.employee_id,
+        date: req.date,
+        leave_type: req.leave_type as LeaveRequest['leave_type'],
+        reason: req.reason || undefined,
+        status: req.status as '申請中' | '承認' | '却下',
+        approved_by: req.approved_by || undefined,
+        approved_at: req.approved_at || undefined,
+        rejection_reason: req.rejection_reason || undefined,
+        created_at: req.created_at,
+        updated_at: req.updated_at
+      }))
+      
+      setLeaveRequests(requests)
+    } catch (error) {
+      console.error('希望休取得エラー:', error)
     }
-    setLeaveRequests(prev => [...prev, newRequest])
   }
 
-  const updateLeaveRequest = (id: string, request: Partial<LeaveRequest>) => {
-    setLeaveRequests(prev =>
-      prev.map(r => (r.id === id ? { ...r, ...request, updated_at: new Date().toISOString() } : r))
-    )
+  const addLeaveRequest = async (request: Omit<LeaveRequest, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const { data, error } = await supabase
+        .from('leave_requests')
+        .insert({
+          employee_id: request.employee_id,
+          date: request.date,
+          leave_type: request.leave_type,
+          reason: request.reason || null,
+          status: request.status || '申請中'
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      if (data) {
+        const newRequest: LeaveRequest = {
+          id: data.id,
+          employee_id: data.employee_id,
+          date: data.date,
+          leave_type: data.leave_type as LeaveRequest['leave_type'],
+          reason: data.reason || undefined,
+          status: data.status as '申請中' | '承認' | '却下',
+          created_at: data.created_at,
+          updated_at: data.updated_at
+        }
+        setLeaveRequests(prev => [newRequest, ...prev])
+      }
+    } catch (error) {
+      console.error('希望休追加エラー:', error)
+    }
+  }
+
+  const updateLeaveRequest = async (id: string, request: Partial<LeaveRequest>) => {
+    try {
+      const updates: any = { ...request }
+      updates.updated_at = new Date().toISOString()
+
+      const { error } = await supabase
+        .from('leave_requests')
+        .update(updates)
+        .eq('id', id)
+
+      if (error) throw error
+      
+      setLeaveRequests(prev =>
+        prev.map(r => (r.id === id ? { ...r, ...request, updated_at: new Date().toISOString() } : r))
+      )
+    } catch (error) {
+      console.error('希望休更新エラー:', error)
+    }
   }
 
   // ============ 制約条件 ============
-  const [constraints, setConstraints] = useState<Constraint[]>([
-    {
-      id: '1',
-      name: '希望休優先',
-      description: '希望休の申請を最優先とする',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '2',
-      name: 'シフトパターン制約',
-      description: 'パターンC（▲）とパターンD（◆）は同日どちらか片方のみとする',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
+  const [constraints, setConstraints] = useState<Constraint[]>([])
+
+  // Supabaseから制約条件を取得
+  const fetchConstraints = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('constraints')
+        .select('*')
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      
+      // null を空文字列に変換
+      const constraintsData: Constraint[] = (data || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        is_active: c.is_active,
+        created_at: c.created_at,
+        updated_at: c.updated_at
+      }))
+      
+      setConstraints(constraintsData)
+    } catch (error) {
+      console.error('制約条件取得エラー:', error)
     }
-  ])
+  }
 
-  const addConstraint = (constraint: Omit<Constraint, 'id' | 'created_at' | 'updated_at'>) => {
-    const newConstraint: Constraint = {
-      ...constraint,
-      id: (constraints.length + 1).toString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+  const addConstraint = async (constraint: Omit<Constraint, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const { data, error } = await supabase
+        .from('constraints')
+        .insert({
+          name: constraint.name,
+          description: constraint.description || null,
+          is_active: constraint.is_active
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      if (data) {
+        const newConstraint: Constraint = {
+          id: data.id,
+          name: data.name,
+          description: data.description || '',
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at
+        }
+        setConstraints(prev => [...prev, newConstraint])
+      }
+    } catch (error) {
+      console.error('制約条件追加エラー:', error)
     }
-    setConstraints(prev => [...prev, newConstraint])
   }
 
-  const updateConstraint = (id: string, constraint: Partial<Constraint>) => {
-    setConstraints(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...constraint, updated_at: new Date().toISOString() } : c))
-    )
+  const updateConstraint = async (id: string, constraint: Partial<Constraint>) => {
+    try {
+      const updates: any = {}
+      if (constraint.name !== undefined) updates.name = constraint.name
+      if (constraint.description !== undefined) updates.description = constraint.description || null
+      if (constraint.is_active !== undefined) updates.is_active = constraint.is_active
+      updates.updated_at = new Date().toISOString()
+
+      const { error } = await supabase
+        .from('constraints')
+        .update(updates)
+        .eq('id', id)
+
+      if (error) throw error
+      
+      setConstraints(prev =>
+        prev.map(c => (c.id === id ? { ...c, ...constraint, updated_at: new Date().toISOString() } : c))
+      )
+    } catch (error) {
+      console.error('制約条件更新エラー:', error)
+    }
   }
 
-  const deleteConstraint = (id: string) => {
-    setConstraints(prev => prev.filter(c => c.id !== id))
+  const deleteConstraint = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('constraints')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      setConstraints(prev => prev.filter(c => c.id !== id))
+    } catch (error) {
+      console.error('制約条件削除エラー:', error)
+    }
   }
+
+  // ============ 初回データ取得 ============
+  useEffect(() => {
+    fetchShiftPatterns()
+    fetchEmployees()
+    fetchShifts()
+    fetchLeaveRequests()
+    fetchConstraints()
+  }, [])
 
   // Context の値
   const value: ShiftDataContextType = {

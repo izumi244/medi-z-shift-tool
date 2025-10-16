@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-
 import { useRouter, usePathname } from 'next/navigation'
-
 import { useAuth } from '@/contexts/AuthContext'
 
 // 従業員がアクセスできないページ
@@ -13,26 +11,47 @@ const EMPLOYEE_RESTRICTED_PAGES = [
   '/constraints'    // 制約条件管理
 ]
 
+// 認証不要なページ
+const PUBLIC_PAGES = [
+  '/login'
+]
+
+// パスワード変更が必要な時でもアクセス可能なページ
+const PASSWORD_CHANGE_ALLOWED_PAGES = [
+  '/change-password',
+  '/login'
+]
+
 interface AuthGuardProps {
   children: React.ReactNode
 }
 
 export default function AuthGuard({ children }: AuthGuardProps) {
-  const { user, isLoading, isAuthenticated } = useAuth()
+  const { user, isLoading, isAuthenticated, needsPasswordChange } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     if (!isLoading) {
       // 未認証の場合、ログインページにリダイレクト
-      if (!isAuthenticated && pathname !== '/login') {
+      if (!isAuthenticated && !PUBLIC_PAGES.includes(pathname)) {
         router.push('/login')
         return
       }
 
-      // 認証済みでログインページにいる場合、ホームページにリダイレクト
+      // 認証済みでログインページにいる場合、適切なページにリダイレクト
       if (isAuthenticated && pathname === '/login') {
-        router.push('/')
+        if (needsPasswordChange) {
+          router.push('/change-password')
+        } else {
+          router.push('/')
+        }
+        return
+      }
+
+      // パスワード変更が必要な場合
+      if (isAuthenticated && needsPasswordChange && !PASSWORD_CHANGE_ALLOWED_PAGES.includes(pathname)) {
+        router.push('/change-password')
         return
       }
 
@@ -42,7 +61,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
         return
       }
     }
-  }, [isAuthenticated, isLoading, user, pathname, router])
+  }, [isAuthenticated, isLoading, user, needsPasswordChange, pathname, router])
 
   // ローディング中
   if (isLoading) {
@@ -56,8 +75,13 @@ export default function AuthGuard({ children }: AuthGuardProps) {
     )
   }
 
-  // 未認証でログインページ以外にアクセスしようとした場合
-  if (!isAuthenticated && pathname !== '/login') {
+  // 未認証で公開ページ以外にアクセスしようとした場合
+  if (!isAuthenticated && !PUBLIC_PAGES.includes(pathname)) {
+    return null
+  }
+
+  // パスワード変更が必要で、許可されていないページにアクセスしようとした場合
+  if (isAuthenticated && needsPasswordChange && !PASSWORD_CHANGE_ALLOWED_PAGES.includes(pathname)) {
     return null
   }
 

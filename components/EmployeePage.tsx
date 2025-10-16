@@ -1,53 +1,39 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-import { Users, Plus, Edit, Trash2, Search, Filter, X, Save, Clock, Calendar, CheckSquare } from 'lucide-react';
-
-// 型定義をローカルで定義
-type EmploymentType = 'パート';
-type JobType = '医療事務';
-
-interface Employee {
-  id: string;
-  name: string;
-  employment_type: EmploymentType;
-  job_type: JobType;
-  available_days: string[];  // 勤務可能曜日
-  assignable_shift_pattern_ids: string[];  // 対応可能シフトパターン
-  
-  // 新要件：労働時間制約
-  max_days_per_week: number;     // 週最大勤務日数
-  max_hours_per_month: number;   // 月最大労働時間（16日-15日）
-  max_hours_per_week?: number;   // 週最大労働時間
-  
-  phone?: string;
-  email?: string;
-  notes?: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+import React, { useState } from 'react'
+import { Users, Plus, Edit, Trash2, Search, Filter, X, Save, Clock, Calendar, CheckSquare, Key, Copy, Check } from 'lucide-react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
+import type { Employee, EmploymentType, JobType, EmployeeAccountInfo } from '@/types'
 
 interface EmployeeFormData {
-  name: string;
-  employment_type: EmploymentType;
-  job_type: JobType;
-  available_days: string[];
-  assignable_shift_pattern_ids: string[];
-  max_days_per_week: number;
-  max_hours_per_month: number;
-  max_hours_per_week?: number;
-  phone?: string;
-  email?: string;
-  notes?: string;
+  name: string
+  employment_type: EmploymentType
+  job_type: JobType
+  available_days: string[]
+  assignable_shift_pattern_ids: string[]
+  max_days_per_week: number
+  max_hours_per_month: number
+  max_hours_per_week?: number
+  phone?: string
+  email?: string
+  notes?: string
 }
 
 const EmployeePage: React.FC = () => {
+  // Contextからデータ取得・更新関数を取得
+  const { employees, shiftPatterns, addEmployee, updateEmployee, deleteEmployee } = useShiftData()
+  
   // 状態管理
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | EmploymentType>('all');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterType, setFilterType] = useState<'all' | EmploymentType>('all')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  
+  // アカウント情報モーダル用の状態
+  const [showAccountInfo, setShowAccountInfo] = useState(false)
+  const [accountInfo, setAccountInfo] = useState<EmployeeAccountInfo | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
   
   // フォームデータ
   const [formData, setFormData] = useState<EmployeeFormData>({
@@ -62,103 +48,33 @@ const EmployeePage: React.FC = () => {
     phone: '',
     email: '',
     notes: ''
-  });
-
-  // 従業員データ（4名固定）
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: '1',
-      name: '富沢',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      available_days: ['月', '火', '水', '木', '金', '土'],
-      assignable_shift_pattern_ids: ['1', '3', '4'], // パターンA, C, D
-      max_days_per_week: 4,
-      max_hours_per_month: 100,
-      max_hours_per_week: 26,
-      phone: '090-1234-5678',
-      email: 'tomizawa@example.com',
-      notes: '週4日・月100h（短時間対応）',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '2',
-      name: '田中',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      available_days: ['月', '火', '水', '木', '金', '土'],
-      assignable_shift_pattern_ids: ['1', '2'], // パターンA, B
-      max_days_per_week: 5,
-      max_hours_per_month: 117,
-      phone: '090-2345-6789',
-      email: 'tanaka@example.com',
-      notes: '週5日・月117h（フルタイム）',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '3',
-      name: '桐山',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      available_days: ['月', '火', '水', '木', '金'], // 土曜不可
-      assignable_shift_pattern_ids: ['5'], // パターンE
-      max_days_per_week: 4,
-      max_hours_per_month: 100,
-      phone: '090-3456-7890',
-      email: 'kirayama@example.com',
-      notes: '週4日・月100h（土曜不可）',
-      is_active: true,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '4',
-      name: 'ヘルプ',
-      employment_type: 'パート',
-      job_type: '医療事務',
-      available_days: [],
-      assignable_shift_pattern_ids: [],
-      max_days_per_week: 0,
-      max_hours_per_month: 0,
-      notes: '表示のみ（シフト組み込み対象外）',
-      is_active: false,
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
-    }
-  ]);
-
-  // シフトパターン選択肢
-  const shiftPatterns = [
-    { id: '1', name: 'パターンA', symbol: '○', description: '09:00-18:00' },
-    { id: '2', name: 'パターンB', symbol: '○', description: '09:00-16:00' },
-    { id: '3', name: 'パターンC', symbol: '▲', description: '09:00-13:00' },
-    { id: '4', name: 'パターンD', symbol: '◆', description: '14:00-18:00' },
-    { id: '5', name: 'パターンE', symbol: '○', description: '09:00-17:00' }
-  ];
+  })
 
   // 曜日選択肢
-  const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+  const weekdays = ['月', '火', '水', '木', '金', '土', '日']
 
   // 職種アイコン
-  const jobTypeIcons = {
+  const jobTypeIcons: Record<JobType, string> = {
+    '看護師': '🩺',
+    '臨床検査技師': '🧪', 
     '医療事務': '📋'
-  };
+  }
 
-  // フィルタリングされた従業員リスト
+  // フィルタリングされた従業員リスト（システムアカウント除外対応）
   const filteredEmployees = employees.filter(employee => {
-    const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterType === 'all' || employee.employment_type === filterType;
-    return matchesSearch && matchesFilter;
-  });
+    const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFilter = filterType === 'all' || employee.employment_type === filterType
+    
+    // システムアカウントを除外（オプションB）
+    const isNotSystemAccount = !employee.is_system_account
+    
+    return matchesSearch && matchesFilter && isNotSystemAccount
+  })
 
   // モーダル開閉
   const openModal = (employee?: Employee) => {
     if (employee) {
-      setEditingEmployee(employee);
+      setEditingEmployee(employee)
       setFormData({
         name: employee.name,
         employment_type: employee.employment_type,
@@ -171,9 +87,9 @@ const EmployeePage: React.FC = () => {
         phone: employee.phone || '',
         email: employee.email || '',
         notes: employee.notes || ''
-      });
+      })
     } else {
-      setEditingEmployee(null);
+      setEditingEmployee(null)
       setFormData({
         name: '',
         employment_type: 'パート',
@@ -186,56 +102,95 @@ const EmployeePage: React.FC = () => {
         phone: '',
         email: '',
         notes: ''
-      });
+      })
     }
-    setIsModalOpen(true);
-  };
+    setIsModalOpen(true)
+  }
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingEmployee(null);
-  };
+    setIsModalOpen(false)
+    setEditingEmployee(null)
+  }
 
-  // 保存処理
-  const handleSave = () => {
+  // アカウント情報モーダル開閉
+  const closeAccountInfo = () => {
+    setShowAccountInfo(false)
+    setAccountInfo(null)
+    setCopiedField(null)
+    closeModal() // 従業員編集モーダルも閉じる
+  }
+
+  // クリップボードにコピー
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch (error) {
+      console.error('コピーに失敗しました:', error)
+    }
+  }
+
+  // 保存処理（非同期対応）
+  const handleSave = async () => {
     if (!formData.name.trim()) {
-      alert('氏名を入力してください');
-      return;
+      alert('氏名を入力してください')
+      return
     }
 
-    const newEmployee: Employee = {
-      id: editingEmployee?.id || Date.now().toString(),
-      name: formData.name,
-      employment_type: formData.employment_type,
-      job_type: formData.job_type,
-      available_days: formData.available_days,
-      assignable_shift_pattern_ids: formData.assignable_shift_pattern_ids,
-      max_days_per_week: formData.max_days_per_week,
-      max_hours_per_month: formData.max_hours_per_month,
-      max_hours_per_week: formData.max_hours_per_week,
-      phone: formData.phone,
-      email: formData.email,
-      notes: formData.notes,
-      is_active: true,
-      created_at: editingEmployee?.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    if (editingEmployee) {
-      setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? newEmployee : emp));
-    } else {
-      setEmployees(prev => [...prev, newEmployee]);
+    setIsLoading(true)
+    try {
+      if (editingEmployee) {
+        // 更新
+        updateEmployee(editingEmployee.id, {
+          name: formData.name,
+          employment_type: formData.employment_type,
+          job_type: formData.job_type,
+          available_days: formData.available_days,
+          assignable_shift_pattern_ids: formData.assignable_shift_pattern_ids,
+          max_days_per_week: formData.max_days_per_week,
+          max_hours_per_month: formData.max_hours_per_month,
+          max_hours_per_week: formData.max_hours_per_week,
+          phone: formData.phone,
+          email: formData.email,
+          notes: formData.notes
+        })
+        closeModal()
+      } else {
+        // 新規追加（アカウント情報を取得）
+        const newAccountInfo = await addEmployee({
+          name: formData.name,
+          employment_type: formData.employment_type,
+          job_type: formData.job_type,
+          available_days: formData.available_days,
+          assignable_shift_pattern_ids: formData.assignable_shift_pattern_ids,
+          max_days_per_week: formData.max_days_per_week,
+          max_hours_per_month: formData.max_hours_per_month,
+          max_hours_per_week: formData.max_hours_per_week,
+          phone: formData.phone,
+          email: formData.email,
+          notes: formData.notes
+        })
+        
+        // アカウント情報モーダルを表示
+        setAccountInfo(newAccountInfo)
+        setShowAccountInfo(true)
+        // 編集モーダルは開いたまま（アカウント情報モーダルを閉じた時に一緒に閉じる）
+      }
+    } catch (error) {
+      console.error('保存エラー:', error)
+      alert(`保存に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`)
+    } finally {
+      setIsLoading(false)
     }
-
-    closeModal();
-  };
+  }
 
   // 削除処理
   const handleDelete = (id: string) => {
     if (confirm('この従業員を削除しますか？')) {
-      setEmployees(prev => prev.filter(emp => emp.id !== id));
+      deleteEmployee(id)
     }
-  };
+  }
 
   // 曜日選択切り替え
   const toggleWeekday = (day: string) => {
@@ -244,8 +199,8 @@ const EmployeePage: React.FC = () => {
       available_days: prev.available_days.includes(day)
         ? prev.available_days.filter(d => d !== day)
         : [...prev.available_days, day]
-    }));
-  };
+    }))
+  }
 
   // シフトパターン選択切り替え
   const toggleShiftPattern = (patternId: string) => {
@@ -254,8 +209,8 @@ const EmployeePage: React.FC = () => {
       assignable_shift_pattern_ids: prev.assignable_shift_pattern_ids.includes(patternId)
         ? prev.assignable_shift_pattern_ids.filter(p => p !== patternId)
         : [...prev.assignable_shift_pattern_ids, patternId]
-    }));
-  };
+    }))
+  }
 
   return (
     <div className="space-y-8">
@@ -331,7 +286,9 @@ const EmployeePage: React.FC = () => {
                       </div>
                       <div>
                         <div className="font-semibold text-gray-800">{employee.name}</div>
-                        <div className="text-sm text-gray-500">ID: {employee.id}</div>
+                        {employee.employee_number && (
+                          <div className="text-sm text-gray-500">ID: {employee.employee_number}</div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -364,12 +321,12 @@ const EmployeePage: React.FC = () => {
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-2">
                       {employee.assignable_shift_pattern_ids.map(patternId => {
-                        const pattern = shiftPatterns.find(p => p.id === patternId);
+                        const pattern = shiftPatterns.find(p => p.id === patternId)
                         return pattern ? (
                           <span key={pattern.id} className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs font-medium">
                             {pattern.name}
                           </span>
-                        ) : null;
+                        ) : null
                       })}
                     </div>
                   </td>
@@ -409,6 +366,23 @@ const EmployeePage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* 従業員が見つからない場合の表示 */}
+        {filteredEmployees.length === 0 && (
+          <div className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg">
+              {searchTerm || filterType !== 'all' 
+                ? '条件に一致する従業員が見つかりません' 
+                : '従業員が登録されていません'}
+            </p>
+            <p className="text-gray-400 text-sm mt-2">
+              {searchTerm || filterType !== 'all' 
+                ? '検索条件を変更してください' 
+                : '新規従業員追加ボタンから従業員を登録してください'}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* 編集モーダル */}
@@ -420,7 +394,11 @@ const EmployeePage: React.FC = () => {
                 <h3 className="text-2xl font-bold text-gray-800">
                   {editingEmployee ? '従業員編集' : '新規従業員追加'}
                 </h3>
-                <button onClick={closeModal} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <button 
+                  onClick={closeModal} 
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  disabled={isLoading}
+                >
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -443,6 +421,7 @@ const EmployeePage: React.FC = () => {
                       onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                       placeholder="例：富沢"
+                      disabled={isLoading}
                     />
                   </div>
                   <div>
@@ -453,6 +432,7 @@ const EmployeePage: React.FC = () => {
                       value={formData.employment_type}
                       onChange={(e) => setFormData(prev => ({ ...prev, employment_type: e.target.value as EmploymentType }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+                      disabled={isLoading}
                     >
                       <option value="パート">パート</option>
                     </select>
@@ -465,6 +445,7 @@ const EmployeePage: React.FC = () => {
                       value={formData.job_type}
                       onChange={(e) => setFormData(prev => ({ ...prev, job_type: e.target.value as JobType }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+                      disabled={isLoading}
                     >
                       <option value="医療事務">医療事務</option>
                     </select>
@@ -479,9 +460,7 @@ const EmployeePage: React.FC = () => {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      週最大勤務日数
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">週最大勤務日数</label>
                     <input
                       type="number"
                       min="0"
@@ -489,24 +468,22 @@ const EmployeePage: React.FC = () => {
                       value={formData.max_days_per_week}
                       onChange={(e) => setFormData(prev => ({ ...prev, max_days_per_week: parseInt(e.target.value) }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+                      disabled={isLoading}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      月最大労働時間（16日-15日）
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">月最大労働時間(16日-15日)</label>
                     <input
                       type="number"
                       min="0"
                       value={formData.max_hours_per_month}
                       onChange={(e) => setFormData(prev => ({ ...prev, max_hours_per_month: parseInt(e.target.value) }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
+                      disabled={isLoading}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      週最大労働時間（時間）
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">週最大労働時間(時間)</label>
                     <input
                       type="number"
                       min="0"
@@ -517,6 +494,7 @@ const EmployeePage: React.FC = () => {
                       }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                       placeholder="任意"
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
@@ -535,6 +513,7 @@ const EmployeePage: React.FC = () => {
                         checked={formData.available_days.includes(day)}
                         onChange={() => toggleWeekday(day)}
                         className="sr-only"
+                        disabled={isLoading}
                       />
                       <span className={`font-semibold ${
                         formData.available_days.includes(day) 
@@ -561,13 +540,14 @@ const EmployeePage: React.FC = () => {
                         checked={formData.assignable_shift_pattern_ids.includes(pattern.id)}
                         onChange={() => toggleShiftPattern(pattern.id)}
                         className="w-4 h-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                        disabled={isLoading}
                       />
                       <span className="w-6 h-6 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center text-xs font-bold">
                         {pattern.symbol}
                       </span>
                       <div className="flex-1">
                         <div className="font-semibold text-gray-700">{pattern.name}</div>
-                        <div className="text-sm text-gray-500">{pattern.description}</div>
+                        <div className="text-sm text-gray-500">{pattern.startTime}-{pattern.endTime}</div>
                       </div>
                     </label>
                   ))}
@@ -586,6 +566,7 @@ const EmployeePage: React.FC = () => {
                       onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                       placeholder="090-1234-5678"
+                      disabled={isLoading}
                     />
                   </div>
                   <div>
@@ -596,6 +577,7 @@ const EmployeePage: React.FC = () => {
                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                       className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors"
                       placeholder="example@example.com"
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
@@ -607,6 +589,7 @@ const EmployeePage: React.FC = () => {
                     className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors resize-none"
                     rows={3}
                     placeholder="特記事項があれば記入"
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -616,25 +599,134 @@ const EmployeePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold transition-colors"
+                  disabled={isLoading}
+                  className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold transition-colors disabled:opacity-50"
                 >
                   キャンセル
                 </button>
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2"
+                  disabled={isLoading}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4" />
-                  {editingEmployee ? '更新' : '追加'}
+                  {isLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      処理中...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingEmployee ? '更新' : '追加'}
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-};
 
-export default EmployeePage;
+      {/* アカウント情報表示モーダル */}
+      {showAccountInfo && accountInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <Key className="w-6 h-6 text-green-600" />
+                  アカウント作成完了
+                </h3>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Check className="w-8 h-8 text-green-600" />
+                </div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-2">
+                  従業員を追加しました
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  以下のログイン情報を従業員にお伝えください
+                </p>
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <p className="text-orange-700 text-sm font-semibold mb-2">
+                  ⚠️ この画面は一度しか表示されません
+                </p>
+                <p className="text-orange-600 text-xs">
+                  ログイン情報を必ずメモまたはコピーしてください
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    従業員番号
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-white px-3 py-2 rounded border text-lg font-mono">
+                      {accountInfo.employee_number}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(accountInfo.employee_number, 'employee_number')}
+                      className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded transition-colors"
+                      title="コピー"
+                    >
+                      {copiedField === 'employee_number' ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    初期パスワード
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-white px-3 py-2 rounded border text-lg font-mono">
+                      {accountInfo.initial_password}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(accountInfo.initial_password, 'password')}
+                      className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded transition-colors"
+                      title="コピー"
+                    >
+                      {copiedField === 'password' ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-700 text-sm">
+                  <strong>初回ログイン時：</strong>パスワードの変更が必要です
+                </p>
+              </div>
+
+              <button
+                onClick={closeAccountInfo}
+                className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold transition-all duration-300"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default EmployeePage
