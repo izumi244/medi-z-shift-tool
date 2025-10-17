@@ -261,9 +261,11 @@ export interface PaginationConfig {
 
 export type UserRole = 'admin' | 'employee' | 'developer'
 
+// 修正版User型 - employee_numberプロパティを追加
 export interface User {
   id: string
   user_id: string
+  employee_number: string    // 追加: 従業員番号
   name: string
   role: UserRole
   avatar?: string

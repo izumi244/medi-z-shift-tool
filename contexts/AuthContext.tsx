@@ -18,6 +18,7 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<void>
   logout: () => Promise<void>
   checkPasswordChangeRequired: () => Promise<boolean>
+  updatePasswordChangeStatus: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -54,10 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await verifySession(sessionToken)
       
       if (userData) {
-        // ユーザー情報を設定
+        // ユーザー情報を設定（修正: employee_numberプロパティを追加）
         const userInfo: User = {
           id: userData.id.toString(),
           user_id: userData.employee_number,
+          employee_number: userData.employee_number,  // 追加: employee_numberプロパティ
           name: userData.name,
           role: userData.role as UserRole,
           created_at: new Date().toISOString(),
@@ -103,10 +105,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(SESSION_KEY, authResult.session_token)
       }
 
-      // ユーザー情報を設定
+      // ユーザー情報を設定（修正: employee_numberプロパティを追加）
       const userInfo: User = {
         id: authResult.id.toString(),
         user_id: authResult.employee_number,
+        employee_number: authResult.employee_number,  // 追加: employee_numberプロパティ
         name: authResult.name,
         role: authResult.role as UserRole,
         created_at: new Date().toISOString(),
@@ -186,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkPasswordChangeRequired = async (): Promise<boolean> => {
     try {
-      if (!user?.user_id) return false
+      if (!user?.employee_number) return false
 
       // セッショントークンを再検証してパスワード変更状態を確認
       const sessionToken = localStorage.getItem(SESSION_KEY)
@@ -208,6 +211,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // パスワード変更完了後にフラグを更新
+  const updatePasswordChangeStatus = () => {
+    setNeedsPasswordChange(false)
+  }
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -215,7 +223,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     needsPasswordChange,
     login,
     logout,
-    checkPasswordChangeRequired
+    checkPasswordChangeRequired,
+    updatePasswordChangeStatus
   }
 
   return (

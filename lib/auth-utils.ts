@@ -181,12 +181,34 @@ export async function logout(sessionToken: string) {
 }
 
 /**
- * パスワード変更
+ * パスワード変更（デバッグ版）
  */
 export async function changePassword(employeeNumber: string, newPassword: string) {
   try {
+    console.log('=== changePassword デバッグ ===')
+    console.log('employeeNumber:', employeeNumber)
+    console.log('newPassword:', newPassword)
+    console.log('newPassword type:', typeof newPassword)
+    console.log('newPassword length:', newPassword?.length)
+    
+    // パラメータ検証
+    if (!employeeNumber) {
+      throw new Error('従業員番号が指定されていません')
+    }
+    
+    if (!newPassword) {
+      throw new Error('新しいパスワードが指定されていません')
+    }
+    
+    if (typeof newPassword !== 'string') {
+      throw new Error(`パスワードの型が正しくありません: ${typeof newPassword}`)
+    }
+    
+    console.log('パスワードハッシュ化開始...')
     const hashedPassword = await hashPassword(newPassword)
+    console.log('パスワードハッシュ化完了:', hashedPassword?.length, '文字')
 
+    console.log('データベース更新開始...')
     const { error } = await supabase
       .from('employees')
       .update({
@@ -196,7 +218,12 @@ export async function changePassword(employeeNumber: string, newPassword: string
       })
       .eq('employee_number', employeeNumber)
 
-    if (error) throw error
+    if (error) {
+      console.log('データベース更新エラー:', error)
+      throw error
+    }
+    
+    console.log('パスワード変更成功')
   } catch (error) {
     console.error('パスワード変更エラー:', error)
     throw error

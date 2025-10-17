@@ -8,7 +8,7 @@ import { changePassword, validatePasswordStrength } from '@/lib/auth-utils'
 
 export default function ChangePasswordPage() {
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { user, logout, updatePasswordChangeStatus } = useAuth()
   
   const [formData, setFormData] = useState({
     newPassword: '',
@@ -60,12 +60,16 @@ export default function ChangePasswordPage() {
 
     setIsLoading(true)
     try {
-      await changePassword(formData.newPassword)
+      // 修正: employeeNumberとnewPasswordの両方を渡す
+      await changePassword(user?.employee_number!, formData.newPassword)
+      
+      // パスワード変更完了後にフラグを更新
+      updatePasswordChangeStatus()
       
       // 成功メッセージ表示後にリダイレクト
       setTimeout(() => {
         router.push('/')
-      }, 2000)
+      }, 1000)
       
     } catch (error) {
       setErrors({ 
@@ -94,7 +98,8 @@ export default function ChangePasswordPage() {
             </p>
             <div className="mt-3 p-2 bg-orange-50 rounded-lg">
               <p className="text-sm text-orange-700">
-                ログイン中: {user?.name} ({user?.user_id})
+                {/* 修正: user_idではなくemployee_numberを使用 */}
+                ログイン中: {user?.name} ({user?.employee_number})
               </p>
             </div>
           </div>
