@@ -5,7 +5,12 @@
       "Bash(npx tsx scripts/check-supabase-status.ts)",
       "Bash(npm install dotenv)",
       "Bash(npx tsx scripts/test-backend.ts)",
-      "Bash(curl http://localhost:3000)"
+      "Bash(curl http://localhost:3000)",
+      "Bash(npx tsx:*)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(git add:*)",
+      "Bash(del nul)"
     ],
     "deny": [],
     "ask": []

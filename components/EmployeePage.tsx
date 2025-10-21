@@ -14,9 +14,6 @@ interface EmployeeFormData {
   max_days_per_week: number
   max_hours_per_month: number
   max_hours_per_week?: number
-  phone?: string
-  email?: string
-  notes?: string
 }
 
 const EmployeePage: React.FC = () => {
@@ -44,10 +41,7 @@ const EmployeePage: React.FC = () => {
     assignable_shift_pattern_ids: [],
     max_days_per_week: 5,
     max_hours_per_month: 160,
-    max_hours_per_week: undefined,
-    phone: '',
-    email: '',
-    notes: ''
+    max_hours_per_week: undefined
   })
 
   // 曜日選択肢
@@ -81,10 +75,7 @@ const EmployeePage: React.FC = () => {
         assignable_shift_pattern_ids: employee.assignable_shift_pattern_ids,
         max_days_per_week: employee.max_days_per_week,
         max_hours_per_month: employee.max_hours_per_month,
-        max_hours_per_week: employee.max_hours_per_week,
-        phone: employee.phone || '',
-        email: employee.email || '',
-        notes: employee.notes || ''
+        max_hours_per_week: employee.max_hours_per_week
       })
     } else {
       setEditingEmployee(null)
@@ -96,10 +87,7 @@ const EmployeePage: React.FC = () => {
         assignable_shift_pattern_ids: [],
         max_days_per_week: 5,
         max_hours_per_month: 160,
-        max_hours_per_week: undefined,
-        phone: '',
-        email: '',
-        notes: ''
+        max_hours_per_week: undefined
       })
     }
     setIsModalOpen(true)
@@ -148,10 +136,7 @@ const EmployeePage: React.FC = () => {
           assignable_shift_pattern_ids: formData.assignable_shift_pattern_ids,
           max_days_per_week: formData.max_days_per_week,
           max_hours_per_month: formData.max_hours_per_month,
-          max_hours_per_week: formData.max_hours_per_week,
-          phone: formData.phone,
-          email: formData.email,
-          notes: formData.notes
+          max_hours_per_week: formData.max_hours_per_week
         })
         closeModal()
       } else {
@@ -164,10 +149,7 @@ const EmployeePage: React.FC = () => {
           assignable_shift_pattern_ids: formData.assignable_shift_pattern_ids,
           max_days_per_week: formData.max_days_per_week,
           max_hours_per_month: formData.max_hours_per_month,
-          max_hours_per_week: formData.max_hours_per_week,
-          phone: formData.phone,
-          email: formData.email,
-          notes: formData.notes
+          max_hours_per_week: formData.max_hours_per_week
         })
         
         // アカウント情報モーダルを表示
@@ -549,46 +531,6 @@ const EmployeePage: React.FC = () => {
                       </div>
                     </label>
                   ))}
-                </div>
-              </div>
-
-              {/* 連絡先・備考 */}
-              <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                <h4 className="text-lg font-bold text-gray-800 mb-4">連絡先・備考</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">電話番号</label>
-                    <input
-                      type="tel"
-                      value={formData.phone || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                      className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors text-gray-900 placeholder:text-gray-400"
-                      placeholder="090-1234-5678"
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">メールアドレス</label>
-                    <input
-                      type="email"
-                      value={formData.email || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors text-gray-900 placeholder:text-gray-400"
-                      placeholder="example@example.com"
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">備考</label>
-                  <textarea
-                    value={formData.notes || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors resize-none text-gray-900 placeholder:text-gray-400"
-                    rows={3}
-                    placeholder="特記事項があれば記入"
-                    disabled={isLoading}
-                  />
                 </div>
               </div>
 

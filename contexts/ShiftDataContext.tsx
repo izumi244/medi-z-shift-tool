@@ -49,6 +49,7 @@ interface ShiftDataContextType {
   shiftData: ShiftData
   setShiftData: React.Dispatch<React.SetStateAction<ShiftData>>
   updateShift: (employeeId: string, day: number, shift: ShiftAssignment) => void
+  saveGeneratedShifts: (shifts: Array<{ date: string; employee_id: string; shift_pattern_id: string; notes?: string }>) => Promise<void>
   
   // 希望休データ
   leaveRequests: LeaveRequest[]
@@ -196,14 +197,15 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         job_type: emp.job_type as JobType,
         max_days_per_week: emp.max_days_per_week,
         max_hours_per_month: emp.max_hours_per_month,
-        available_days: [],
-        assignable_shift_pattern_ids: [],
-        
+        max_hours_per_week: (emp as any).max_hours_per_week,
+        available_days: (emp as any).available_days || [],
+        assignable_shift_pattern_ids: (emp as any).assignable_shift_pattern_ids || [],
+
         // 認証関連フィールド（null を適切に処理）
         employee_number: emp.employee_number ? emp.employee_number : undefined,
         password_changed: emp.password_changed ? emp.password_changed : false,
         is_system_account: emp.is_system_account ? emp.is_system_account : false,  // システムアカウント判定
-        
+
         is_active: true,
         created_at: emp.created_at,
         updated_at: emp.updated_at
@@ -244,10 +246,13 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       if (employee.job_type) updates.job_type = employee.job_type
       if (employee.max_days_per_week !== undefined) updates.max_days_per_week = employee.max_days_per_week
       if (employee.max_hours_per_month !== undefined) updates.max_hours_per_month = employee.max_hours_per_month
+      if (employee.max_hours_per_week !== undefined) updates.max_hours_per_week = employee.max_hours_per_week
+      if (employee.available_days !== undefined) updates.available_days = employee.available_days
+      if (employee.assignable_shift_pattern_ids !== undefined) updates.assignable_shift_pattern_ids = employee.assignable_shift_pattern_ids
       if (employee.employee_number) updates.employee_number = employee.employee_number
       if (employee.password_changed !== undefined) updates.password_changed = employee.password_changed
       if (employee.is_system_account !== undefined) updates.is_system_account = employee.is_system_account
-      
+
       updates.updated_at = new Date().toISOString()
 
       const { error } = await supabase
@@ -256,7 +261,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         .eq('id', id)
 
       if (error) throw error
-      
+
       setEmployees(prev =>
         prev.map(e => (e.id === id ? { ...e, ...employee, updated_at: new Date().toISOString() } : e))
       )
@@ -318,7 +323,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
   const updateShift = async (employeeId: string, day: number, shift: ShiftAssignment) => {
     try {
       const date = `2025-10-${day.toString().padStart(2, '0')}`
-      
+
       const { error } = await supabase
         .from('shifts')
         .upsert({
@@ -329,7 +334,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         })
 
       if (error) throw error
-      
+
       setShiftData(prev => ({
         ...prev,
         [employeeId]: {
@@ -339,6 +344,80 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       }))
     } catch (error) {
       console.error('シフト更新エラー:', error)
+    }
+  }
+
+  // AI生成シフトを一括保存
+  const saveGeneratedShifts = async (shifts: Array<{
+    date: string
+    employee_id: string
+    shift_pattern_id: string
+    notes?: string
+  }>) => {
+    try {
+      console.log('保存開始:', shifts.length, 'シフト')
+
+      if (!shifts || shifts.length === 0) {
+        throw new Error('保存するシフトがありません')
+      }
+
+      // まず既存のシフトを削除（対象月のみ）
+      const targetMonth = shifts[0]?.date.substring(0, 7) // "2025-11"
+      if (targetMonth) {
+        const [year, month] = targetMonth.split('-').map(Number)
+        const lastDay = new Date(year, month, 0).getDate() // 月の最終日を動的に取得
+
+        const startDate = `${targetMonth}-01`
+        const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`
+
+        console.log('既存シフト削除:', startDate, 'から', endDate)
+
+        const { error: deleteError } = await supabase
+          .from('shifts')
+          .delete()
+          .gte('date', startDate)
+          .lte('date', endDate)
+
+        if (deleteError) {
+          console.error('削除エラー:', deleteError)
+          throw deleteError
+        }
+      }
+
+      // 新しいシフトを挿入
+      const shiftsToInsert = shifts.map(shift => ({
+        employee_id: shift.employee_id,
+        date: shift.date,
+        shift_pattern_id: shift.shift_pattern_id,
+        shift_symbol: '○', // デフォルト記号（後で調整可能）
+        actual_hours: 8, // デフォルト時間（後で調整可能）
+        status: 'draft' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }))
+
+      console.log('挿入するシフト数:', shiftsToInsert.length)
+      console.log('最初のシフトデータ:', shiftsToInsert[0])
+
+      const { data: insertedData, error: insertError } = await supabase
+        .from('shifts')
+        .insert(shiftsToInsert)
+        .select()
+
+      if (insertError) {
+        console.error('挿入エラー詳細:', insertError)
+        throw insertError
+      }
+
+      console.log('挿入成功:', insertedData?.length, 'レコード')
+
+      // シフトデータを再取得
+      await fetchShifts()
+
+      console.log('保存完了')
+    } catch (error) {
+      console.error('AI生成シフト保存エラー:', error)
+      throw error
     }
   }
 
@@ -549,6 +628,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
     shiftData,
     setShiftData,
     updateShift,
+    saveGeneratedShifts,
     
     leaveRequests,
     setLeaveRequests,

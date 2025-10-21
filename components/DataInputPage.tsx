@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, ReactNode } from 'react'
+import { useShiftData } from '@/contexts/ShiftDataContext'
 
-import { 
-  Users, 
-  Calendar, 
-  Bot, 
-  ClipboardList, 
+import {
+  Users,
+  Calendar,
+  Bot,
+  ClipboardList,
   Rocket,
   Play,
   Clock
@@ -26,6 +27,7 @@ interface DataInputPageProps {
 }
 
 export default function DataInputPage({ onNavigate }: DataInputPageProps) {
+  const { employees, leaveRequests, shiftPatterns, constraints, saveGeneratedShifts } = useShiftData()
   const [targetMonth, setTargetMonth] = useState('2025-08')
   const [specialRequests, setSpecialRequests] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -90,20 +92,80 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
     }
 
     setIsGenerating(true)
-    
+
     try {
-      // AIシフト作成のシミュレーション
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      
-      alert(`${targetMonth}のシフトを作成しました！\n特別要望: ${specialRequests || 'なし'}`)
-      
-      // シフト表示ページに遷移
-      if (onNavigate) {
-        onNavigate('shift')
+      // Dify Workflow APIを呼び出してシフトを生成
+      // システムアカウントを除外（is_system_account: trueの従業員は除く）
+      const actualEmployees = employees.filter(emp => !emp.is_system_account)
+
+      console.log('全従業員数:', employees.length)
+      console.log('シフト対象従業員数:', actualEmployees.length)
+      console.log('シフト対象:', actualEmployees.map(e => e.name))
+
+      // 従業員とシフトパターンに連番IDを追加（Difyが参照しやすいように）
+      const employeesWithIndex = actualEmployees.map((emp, index) => ({
+        ...emp,
+        index_id: index + 1,
+        uuid: emp.id
+      }))
+
+      const shiftPatternsWithIndex = shiftPatterns.map((pattern, index) => ({
+        ...pattern,
+        index_id: index + 1,
+        uuid: pattern.id
+      }))
+
+      // アクティブな制約条件を取得してフォーマット
+      const activeConstraints = constraints
+        .filter(c => c.is_active)
+        .map(c => `- ${c.name}: ${c.description}`)
+        .join('\n')
+
+      const allConstraints = [
+        activeConstraints,
+        specialRequests ? `\n【特別要望】\n${specialRequests}` : ''
+      ].filter(Boolean).join('\n') || '特になし'
+
+      console.log('送信する制約条件:\n', allConstraints)
+
+      const response = await fetch('/api/generate-shift', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target_month: targetMonth,
+          employees: employeesWithIndex,
+          leave_requests: leaveRequests,
+          shift_patterns: shiftPatternsWithIndex,
+          constraints: allConstraints,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'シフト生成に失敗しました')
       }
-      
+
+      const result = await response.json()
+
+      if (result.success && result.data.shifts) {
+        // Supabaseにシフトを保存
+        await saveGeneratedShifts(result.data.shifts)
+
+        alert(`${targetMonth}のシフトを作成しました！\n生成されたシフト数: ${result.data.shifts.length}`)
+
+        // シフト表示ページに遷移
+        if (onNavigate) {
+          onNavigate('shift')
+        }
+      } else {
+        throw new Error('シフト生成に失敗しました')
+      }
+
     } catch (error) {
-      alert('シフト作成中にエラーが発生しました')
+      console.error('Shift generation error:', error)
+      alert(`シフト作成中にエラーが発生しました\n${error instanceof Error ? error.message : ''}`)
     } finally {
       setIsGenerating(false)
     }

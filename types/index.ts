@@ -46,16 +46,13 @@ export interface Employee {
   max_days_per_week: number     // 週最大勤務日数
   max_hours_per_month: number   // 月最大労働時間（16日-15日）
   max_hours_per_week?: number   // 週最大労働時間（富沢の26時間制限）
-  
-// 認証関連フィールド（データベースに合わせてnull許容）
-user_id?: string | null
-employee_number?: string | null
-password_changed?: boolean | null
-is_system_account?: boolean | null
-  
-  phone?: string
-  email?: string
-  notes?: string
+
+  // 認証関連フィールド（データベースに合わせてnull許容）
+  user_id?: string | null
+  employee_number?: string | null
+  password_changed?: boolean | null
+  is_system_account?: boolean | null
+
   is_active: boolean
   created_at: string
   updated_at: string
@@ -152,9 +149,6 @@ export interface EmployeeFormData {
   max_days_per_week: number
   max_hours_per_month: number
   max_hours_per_week?: number
-  phone?: string
-  email?: string
-  notes?: string
 }
 
 // 希望休フォーム（変更なし）

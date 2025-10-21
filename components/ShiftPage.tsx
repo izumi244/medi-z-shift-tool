@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { supabase } from '@/lib/supabase'
 import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
 
 interface ShiftAssignment {
@@ -25,6 +26,11 @@ const ShiftPage: React.FC = () => {
     reason: ''
   })
 
+  // 今月のシフトデータ（表示用）
+  const [currentMonthShifts, setCurrentMonthShifts] = useState<any[]>([])
+  // 前月16日～今月15日のシフトデータ（勤務時間計算用）
+  const [payrollPeriodShifts, setPayrollPeriodShifts] = useState<any[]>([])
+
   // システムアカウントを除外した従業員リスト
   const filteredEmployees = useMemo(() => {
     return employees.filter(employee => !employee.is_system_account)
@@ -34,6 +40,52 @@ const ShiftPage: React.FC = () => {
   const month = currentDate.getMonth()
   const monthName = currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
   const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  // 今月のシフトデータと給与計算期間のシフトデータを取得
+  useEffect(() => {
+    const fetchShiftsData = async () => {
+      const prevMonth = month === 0 ? 11 : month - 1
+      const prevYear = month === 0 ? year - 1 : year
+
+      // 今月のシフトデータを取得（表示用）
+      const currentMonthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
+      // 月末日を正しく取得（28〜31日まで対応）
+      const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+      const currentMonthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`
+
+      const { data: currentData, error: currentError } = await supabase
+        .from('shifts')
+        .select('*, shift_patterns(*)')
+        .gte('date', currentMonthStart)
+        .lte('date', currentMonthEnd)
+
+      if (currentError) {
+        console.error('今月のシフト取得エラー:', currentError)
+      } else {
+        setCurrentMonthShifts(currentData || [])
+        console.log(`${year}年${month + 1}月のシフト:`, currentData?.length, '件')
+      }
+
+      // 前月16日～今月15日のシフトデータを取得（給与計算期間）
+      const payrollStart = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-16`
+      const payrollEnd = `${year}-${String(month + 1).padStart(2, '0')}-15`
+
+      const { data: payrollData, error: payrollError } = await supabase
+        .from('shifts')
+        .select('*, shift_patterns(*)')
+        .gte('date', payrollStart)
+        .lte('date', payrollEnd)
+
+      if (payrollError) {
+        console.error('給与計算期間のシフト取得エラー:', payrollError)
+      } else {
+        setPayrollPeriodShifts(payrollData || [])
+        console.log('給与計算期間のシフト:', payrollData?.length, '件')
+      }
+    }
+
+    fetchShiftsData()
+  }, [year, month])
 
   // カレンダー日付生成
   const generateDays = () => {
@@ -115,14 +167,17 @@ const ShiftPage: React.FC = () => {
 
   // セル表示用のコンポーネント
   const renderShiftCell = (employee: Employee, day: number, dayInfo: { isSunday: boolean, isSaturday: boolean, dayOfWeek: string }) => {
-    const shift = shiftData[employee.id]?.[day]
     const isClinicClosed = dayInfo.dayOfWeek === '水' || dayInfo.isSunday
-    
+
     const cellClass = `border-r border-gray-200 h-20 p-1 align-middle text-center ${
       isClinicClosed ? 'bg-gray-100' : 'bg-white'
     } ${editMode && !isClinicClosed ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`
 
-    if (!shift || !shift.symbol) {
+    // currentMonthShiftsから該当日のシフトを検索
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    const shift = currentMonthShifts.find(s => s.employee_id === employee.id && s.date === dateStr)
+
+    if (!shift) {
       return <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)} />
     }
 
@@ -147,14 +202,15 @@ const ShiftPage: React.FC = () => {
       return 'text-gray-600 bg-gray-100'
     }
 
-    const pattern = shiftPatterns.find(p => p.id === shift.patternId)
-    const timeInfo = pattern ? `${pattern.startTime}-${pattern.endTime}` : shift.reason || ''
+    // shift.shift_patterns がリレーションデータ
+    const pattern = shift.shift_patterns
+    const timeInfo = pattern ? `${pattern.start_time}-${pattern.end_time}` : ''
 
     return (
       <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)}>
         <div className="h-full flex flex-col items-center justify-center">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${getSymbolColor(shift.symbol, shift.patternId)}`}>
-            {shift.symbol}
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${getSymbolColor(shift.shift_symbol as ShiftSymbol, shift.shift_pattern_id)}`}>
+            {shift.shift_symbol}
           </div>
           {timeInfo && (
             <div className="text-xs text-gray-500 mt-1 w-full text-center px-1">
@@ -166,23 +222,24 @@ const ShiftPage: React.FC = () => {
     )
   }
 
-  // 労働時間統計計算
+  // 労働時間統計計算（今月の予定出勤日数と前月16日～今月15日の勤務時間）
   const calculateMonthlyStats = (employeeId: string) => {
-    const shifts = shiftData[employeeId] || {}
-    let totalDays = 0
-    let totalHours = 0
+    // 今月の予定出勤日数を計算
+    const employeeCurrentShifts = currentMonthShifts.filter(s => s.employee_id === employeeId)
+    const totalDays = employeeCurrentShifts.filter(s => s.shift_symbol !== '×').length
 
-    Object.values(shifts).forEach(shift => {
-      if (shift.symbol !== '×' && shift.patternId) {
-        const pattern = shiftPatterns.find(p => p.id === shift.patternId)
-        if (pattern) {
-          totalDays++
-          totalHours += pattern.workingHours
-        }
+    // 前月16日～今月15日の勤務時間を計算（給与計算期間）
+    let totalHours = 0
+    const employeePayrollShifts = payrollPeriodShifts.filter(s => s.employee_id === employeeId)
+
+    employeePayrollShifts.forEach(shift => {
+      if (shift.shift_symbol !== '×' && shift.shift_patterns) {
+        const workMinutes = shift.shift_patterns.work_minutes || 0
+        totalHours += workMinutes / 60
       }
     })
 
-    return { totalDays, totalHours }
+    return { totalDays, totalHours: Math.round(totalHours * 10) / 10 }
   }
 
   // 従業員の制約表示
@@ -287,7 +344,7 @@ const ShiftPage: React.FC = () => {
                 <div className="flex flex-col">
                   <span className={`${getPatternTextColor(pattern.symbol)} font-medium`}>{pattern.name}</span>
                   <span className={`text-xs ${getPatternTextColor(pattern.symbol)} opacity-80`}>
-                    {pattern.startTime}-{pattern.endTime}
+                    {pattern.start_time}-{pattern.end_time}
                   </span>
                 </div>
               </div>
@@ -332,7 +389,7 @@ const ShiftPage: React.FC = () => {
                     <td className="sticky left-0 bg-white border-r border-gray-200 p-3 z-10">
                       <div className="text-sm font-semibold text-gray-800">{employee.name}</div>
                       <div className="text-xs text-gray-600">{getEmployeeTypeDisplay(employee)}</div>
-                      <div className="text-xs text-gray-500">実績: {stats.totalDays}日・{stats.totalHours}h</div>
+                      <div className="text-xs text-gray-500">{stats.totalDays}日・{stats.totalHours}h</div>
                     </td>
                     {days.map(({ day, isSaturday, isSunday, dayOfWeek }) => 
                       renderShiftCell(employee, day, { isSaturday, isSunday, dayOfWeek })
