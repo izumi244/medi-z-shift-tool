@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(npx tsx scripts/check-supabase-status.ts)",
+      "Bash(npm install dotenv)",
+      "Bash(npx tsx scripts/test-backend.ts)",
+      "Bash(curl http://localhost:3000)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
