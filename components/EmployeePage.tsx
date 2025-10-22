@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { Users, Plus, Edit, Trash2, Search, Filter, X, Save, Clock, Calendar, CheckSquare, Key, Copy, Check } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
 import type { Employee, EmploymentType, JobType, EmployeeAccountInfo } from '@/types'
 
 interface EmployeeFormData {
@@ -19,7 +20,10 @@ interface EmployeeFormData {
 const EmployeePage: React.FC = () => {
   // Contextからデータ取得・更新関数を取得
   const { employees, shiftPatterns, addEmployee, updateEmployee, deleteEmployee } = useShiftData()
-  
+
+  // システムアカウントを除外
+  const nonSystemEmployees = useNonSystemEmployees(employees)
+
   // 状態管理
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | EmploymentType>('all')
@@ -52,15 +56,12 @@ const EmployeePage: React.FC = () => {
     '医療事務': '📋'
   }
 
-  // フィルタリングされた従業員リスト（システムアカウント除外対応）
-  const filteredEmployees = employees.filter(employee => {
+  // フィルタリングされた従業員リスト（システムアカウントは既に除外済み）
+  const filteredEmployees = nonSystemEmployees.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFilter = filterType === 'all' || employee.employment_type === filterType
-    
-    // システムアカウントを除外（オプションB）
-    const isNotSystemAccount = !employee.is_system_account
-    
-    return matchesSearch && matchesFilter && isNotSystemAccount
+
+    return matchesSearch && matchesFilter
   })
 
   // モーダル開閉

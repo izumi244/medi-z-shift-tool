@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
  * パスワードをbcryptでハッシュ化
  */
 export async function hashPassword(password: string): Promise<string> {
-  const saltRounds = 10
+  const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10)
   return await bcrypt.hash(password, saltRounds)
 }
 
@@ -366,14 +366,6 @@ export async function createEmployeeAccount(employeeData: {
 export function validateEmployeeNumber(employeeNumber: string): boolean {
   const pattern = /^emp[0-9]{3}$/
   return pattern.test(employeeNumber)
-}
-
-/**
- * パスワードの形式チェック（英字3文字+数字3文字）
- */
-export function validatePasswordFormat(password: string): boolean {
-  const pattern = /^[a-z]{3}[0-9]{3}$/
-  return pattern.test(password)
 }
 
 /**

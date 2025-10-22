@@ -1,8 +1,13 @@
 // スクリプト: shifts テーブルのデータを確認
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://vvxiclrupxwipfuxzqzg.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2eGljbHJ1cHh3aXBmdXh6cXpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0OTMxNTcsImV4cCI6MjA3NjA2OTE1N30.1d2M9sYg17oCoGxbcbPX-VJVszvXzzttdvk5f4ShN50'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('環境変数 NEXT_PUBLIC_SUPABASE_URL と NEXT_PUBLIC_SUPABASE_ANON_KEY が必要です')
+  process.exit(1)
+}
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 

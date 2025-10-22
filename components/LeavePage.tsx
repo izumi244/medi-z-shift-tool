@@ -15,13 +15,14 @@ import {
   X
 } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { getCurrentYearMonth } from '@/utils/dateFormat'
 import type { LeaveRequest, RequestStatus } from '@/types'
 
 const LeavePage: React.FC = () => {
   // Contextからデータ取得（ローカル状態管理から変更）
   const { employees, leaveRequests, addLeaveRequest, updateLeaveRequest } = useShiftData()
-  
-  const [currentMonth, setCurrentMonth] = useState('2025-08')
+
+  const [currentMonth, setCurrentMonth] = useState(getCurrentYearMonth())
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null)

@@ -4,6 +4,9 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '@/lib/supabase'
 import type { ShiftPattern, Employee, LeaveRequest, EmployeeAccountInfo, JobType } from '@/types'
 import { createEmployeeAccount } from '@/lib/auth-utils'
+import { formatDate, getCurrentYearMonth, padZero } from '@/utils/dateFormat'
+import { logError } from '@/lib/errorHandler'
+import { toDomainEmployee } from '@/types/database'
 
 // シフトデータの型定義
 type ShiftSymbol = '○' | '▲' | '◆' | '×' | '✕' | '■' | '▶'
@@ -48,7 +51,7 @@ interface ShiftDataContextType {
   // シフトデータ
   shiftData: ShiftData
   setShiftData: React.Dispatch<React.SetStateAction<ShiftData>>
-  updateShift: (employeeId: string, day: number, shift: ShiftAssignment) => void
+  updateShift: (employeeId: string, day: number, shift: ShiftAssignment, yearMonth?: string) => void
   saveGeneratedShifts: (shifts: Array<{ date: string; employee_id: string; shift_pattern_id: string; notes?: string }>) => Promise<void>
   
   // 希望休データ
@@ -92,13 +95,12 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         endTime: pattern.end_time,
         workingHours: pattern.work_minutes / 60,
         breakMinutes: pattern.break_minutes,
-        applicableStaff: [],
         color: 'bg-blue-500'
       }))
       
       setShiftPatterns(patterns)
     } catch (error) {
-      console.error('シフトパターン取得エラー:', error)
+      logError('シフトパターン取得', error)
     }
   }
 
@@ -127,13 +129,12 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
           endTime: data.end_time,
           workingHours: data.work_minutes / 60,
           breakMinutes: data.break_minutes,
-          applicableStaff: pattern.applicableStaff,
           color: pattern.color
         }
         setShiftPatterns(prev => [...prev, newPattern])
       }
     } catch (error) {
-      console.error('シフトパターン追加エラー:', error)
+      logError('シフトパターン追加', error)
     }
   }
 
@@ -158,7 +159,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         prev.map(p => (p.id === id ? { ...p, ...pattern } : p))
       )
     } catch (error) {
-      console.error('シフトパターン更新エラー:', error)
+      logError('シフトパターン更新', error)
     }
   }
 
@@ -172,7 +173,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       if (error) throw error
       setShiftPatterns(prev => prev.filter(p => p.id !== id))
     } catch (error) {
-      console.error('シフトパターン削除エラー:', error)
+      logError('シフトパターン削除', error)
     }
   }
 
@@ -189,31 +190,16 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error
       
-      // Supabaseの型からアプリの型に変換
-      const employeeData: Employee[] = (data || []).map(emp => ({
-        id: emp.id,
-        name: emp.name,
-        employment_type: emp.employment_type as '常勤' | 'パート',
-        job_type: emp.job_type as JobType,
-        max_days_per_week: emp.max_days_per_week,
-        max_hours_per_month: emp.max_hours_per_month,
-        max_hours_per_week: (emp as any).max_hours_per_week,
-        available_days: (emp as any).available_days || [],
-        assignable_shift_pattern_ids: (emp as any).assignable_shift_pattern_ids || [],
-
-        // 認証関連フィールド（null を適切に処理）
-        employee_number: emp.employee_number ? emp.employee_number : undefined,
-        password_changed: emp.password_changed ? emp.password_changed : false,
-        is_system_account: emp.is_system_account ? emp.is_system_account : false,  // システムアカウント判定
-
-        is_active: true,
-        created_at: emp.created_at,
-        updated_at: emp.updated_at
-      }))
+      // Supabaseの型からアプリの型に変換（型安全な変換関数を使用）
+      const employeeData: Employee[] = (data || []).map(emp => toDomainEmployee({
+        ...emp,
+        available_days: emp.available_days || [],
+        assignable_shift_pattern_ids: emp.assignable_shift_pattern_ids || [],
+      } as import('@/types/database').DatabaseEmployee))
       
       setEmployees(employeeData)
     } catch (error) {
-      console.error('従業員取得エラー:', error)
+      logError('従業員取得', error)
     }
   }
 
@@ -233,7 +219,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       
       return accountInfo
     } catch (error) {
-      console.error('従業員追加エラー:', error)
+      logError('従業員追加', error)
       throw error
     }
   }
@@ -266,7 +252,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         prev.map(e => (e.id === id ? { ...e, ...employee, updated_at: new Date().toISOString() } : e))
       )
     } catch (error) {
-      console.error('従業員更新エラー:', error)
+      logError('従業員更新', error)
     }
   }
 
@@ -280,7 +266,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       if (error) throw error
       setEmployees(prev => prev.filter(e => e.id !== id))
     } catch (error) {
-      console.error('従業員削除エラー:', error)
+      logError('従業員削除', error)
     }
   }
 
@@ -316,13 +302,15 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       
       setShiftData(shiftMap)
     } catch (error) {
-      console.error('シフトデータ取得エラー:', error)
+      logError('シフトデータ取得', error)
     }
   }
 
-  const updateShift = async (employeeId: string, day: number, shift: ShiftAssignment) => {
+  const updateShift = async (employeeId: string, day: number, shift: ShiftAssignment, yearMonth?: string) => {
     try {
-      const date = `2025-10-${day.toString().padStart(2, '0')}`
+      // 年月が指定されていない場合は現在の年月を使用
+      const ym = yearMonth || getCurrentYearMonth()
+      const date = `${ym}-${padZero(day)}`
 
       const { error } = await supabase
         .from('shifts')
@@ -343,7 +331,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         }
       }))
     } catch (error) {
-      console.error('シフト更新エラー:', error)
+      logError('シフト更新', error)
     }
   }
 
@@ -379,7 +367,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
           .lte('date', endDate)
 
         if (deleteError) {
-          console.error('削除エラー:', deleteError)
+          logError('シフト削除', deleteError)
           throw deleteError
         }
       }
@@ -405,7 +393,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         .select()
 
       if (insertError) {
-        console.error('挿入エラー詳細:', insertError)
+        logError('シフト挿入', insertError)
         throw insertError
       }
 
@@ -416,7 +404,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
 
       console.log('保存完了')
     } catch (error) {
-      console.error('AI生成シフト保存エラー:', error)
+      logError('AI生成シフト保存', error)
       throw error
     }
   }
@@ -450,7 +438,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       
       setLeaveRequests(requests)
     } catch (error) {
-      console.error('希望休取得エラー:', error)
+      logError('希望休取得', error)
     }
   }
 
@@ -483,7 +471,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         setLeaveRequests(prev => [newRequest, ...prev])
       }
     } catch (error) {
-      console.error('希望休追加エラー:', error)
+      logError('希望休追加', error)
     }
   }
 
@@ -503,7 +491,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         prev.map(r => (r.id === id ? { ...r, ...request, updated_at: new Date().toISOString() } : r))
       )
     } catch (error) {
-      console.error('希望休更新エラー:', error)
+      logError('希望休更新', error)
     }
   }
 
@@ -532,7 +520,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       
       setConstraints(constraintsData)
     } catch (error) {
-      console.error('制約条件取得エラー:', error)
+      logError('制約条件取得', error)
     }
   }
 
@@ -561,7 +549,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         setConstraints(prev => [...prev, newConstraint])
       }
     } catch (error) {
-      console.error('制約条件追加エラー:', error)
+      logError('制約条件追加', error)
     }
   }
 
@@ -584,7 +572,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         prev.map(c => (c.id === id ? { ...c, ...constraint, updated_at: new Date().toISOString() } : c))
       )
     } catch (error) {
-      console.error('制約条件更新エラー:', error)
+      logError('制約条件更新', error)
     }
   }
 
@@ -598,7 +586,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       if (error) throw error
       setConstraints(prev => prev.filter(c => c.id !== id))
     } catch (error) {
-      console.error('制約条件削除エラー:', error)
+      logError('制約条件削除', error)
     }
   }
 

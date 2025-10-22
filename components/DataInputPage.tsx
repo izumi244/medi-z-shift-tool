@@ -2,6 +2,8 @@
 
 import { useState, ReactNode } from 'react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
+import { getCurrentYearMonth } from '@/utils/dateFormat'
 
 import {
   Users,
@@ -28,7 +30,11 @@ interface DataInputPageProps {
 
 export default function DataInputPage({ onNavigate }: DataInputPageProps) {
   const { employees, leaveRequests, shiftPatterns, constraints, saveGeneratedShifts } = useShiftData()
-  const [targetMonth, setTargetMonth] = useState('2025-08')
+
+  // システムアカウントを除外
+  const actualEmployees = useNonSystemEmployees(employees)
+
+  const [targetMonth, setTargetMonth] = useState(getCurrentYearMonth())
   const [specialRequests, setSpecialRequests] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
 
@@ -95,8 +101,7 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
 
     try {
       // Dify Workflow APIを呼び出してシフトを生成
-      // システムアカウントを除外（is_system_account: trueの従業員は除く）
-      const actualEmployees = employees.filter(emp => !emp.is_system_account)
+      // システムアカウントは既に除外済み（actualEmployees）
 
       console.log('全従業員数:', employees.length)
       console.log('シフト対象従業員数:', actualEmployees.length)

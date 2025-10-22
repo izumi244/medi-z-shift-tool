@@ -3,12 +3,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, LoginCredentials, UserRole } from '@/types'
-import { 
+import {
   login as authLogin,
   logout as authLogout,
   verifySession,
   validateEmployeeNumber
 } from '@/lib/auth-utils'
+import { STORAGE_KEYS } from '@/lib/constants'
 
 interface AuthContextType {
   user: User | null
@@ -23,8 +24,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// セッション管理のキー
-const SESSION_KEY = 'auth_session_token'
+// セッション管理のキー（統一された定数を使用）
+const SESSION_KEY = STORAGE_KEYS.SESSION
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

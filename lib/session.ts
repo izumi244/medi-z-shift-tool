@@ -1,4 +1,5 @@
 import { User } from '@/types'
+import { STORAGE_KEYS } from '@/lib/constants'
 
 export interface Session {
   user: User
@@ -6,7 +7,7 @@ export interface Session {
   createdAt: string
 }
 
-const SESSION_KEY = 'shift_tool_session'
+const SESSION_KEY = STORAGE_KEYS.SESSION
 
 // セッション取得
 export async function getSession(): Promise<Session | null> {

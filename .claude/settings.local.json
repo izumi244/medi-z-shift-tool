@@ -10,7 +10,10 @@
       "Bash(npm run dev:*)",
       "Bash(taskkill:*)",
       "Bash(git add:*)",
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(del \"c:\\Users\\tooth\\Downloads\\事務シフト\\lib\\auth.ts\")"
     ],
     "deny": [],
     "ask": []

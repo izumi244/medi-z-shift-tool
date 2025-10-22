@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { LoginCredentials } from '@/types'
 import { Lock, User, Eye, EyeOff } from 'lucide-react'
+import { validateEmployeeNumber, VALIDATION_MESSAGES } from '@/lib/validation'
 
 interface FormErrors {
   user_id?: string
@@ -28,9 +29,9 @@ export default function LoginForm() {
 
     // 従業員番号チェック（emp001形式）
     if (!formData.user_id.trim()) {
-      newErrors.user_id = '従業員番号を入力してください'
-    } else if (!/^emp[0-9]{3}$/.test(formData.user_id)) {
-      newErrors.user_id = '従業員番号はemp001形式で入力してください'
+      newErrors.user_id = VALIDATION_MESSAGES.EMPLOYEE_NUMBER_REQUIRED
+    } else if (!validateEmployeeNumber(formData.user_id)) {
+      newErrors.user_id = VALIDATION_MESSAGES.EMPLOYEE_NUMBER_FORMAT
     }
 
     // パスワードチェック
@@ -61,14 +62,6 @@ export default function LoginForm() {
     }
   }
 
-  // デモユーザーでのクイックログイン
-  const quickLogin = (employeeNumber: string, password: string) => {
-    setFormData(prev => ({
-      ...prev,
-      user_id: employeeNumber,
-      password: password
-    }))
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -171,31 +164,6 @@ export default function LoginForm() {
               {isLoading ? 'ログイン中...' : 'ログイン'}
             </button>
           </form>
-
-          {/* クイックログイン（開発用） */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-600 mb-3 font-semibold">クイックログイン:</p>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => quickLogin('emp001', 'dev123')}
-                className="w-full text-left px-3 py-2 text-xs bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
-                disabled={isLoading}
-              >
-                <div className="font-semibold text-blue-800">🔧 開発者</div>
-                <div className="text-blue-600">emp001 / dev123</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin('emp002', 'admin123')}
-                className="w-full text-left px-3 py-2 text-xs bg-green-50 hover:bg-green-100 rounded border border-green-200 transition-colors"
-                disabled={isLoading}
-              >
-                <div className="font-semibold text-green-800">👑 管理者</div>
-                <div className="text-green-600">emp002 / admin123</div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

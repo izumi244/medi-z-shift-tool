@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createIdMap } from '@/utils/employeeUtils'
 
 // 週のキーを取得（月曜日始まり）
 function getWeekKey(date: Date): string {
@@ -274,16 +275,10 @@ export async function POST(request: NextRequest) {
     // IDマッピング: 数字の文字列を実際のUUIDに変換
     if (shiftData.shifts && shiftData.shifts.length > 0) {
       // 従業員IDマッピング（配列のインデックス＋1が数字IDになっている想定）
-      const employeeIdMap: { [key: string]: string } = {}
-      body.employees.forEach((emp, index) => {
-        employeeIdMap[String(index + 1)] = emp.id
-      })
+      const employeeIdMap = createIdMap(body.employees)
 
       // シフトパターンIDマッピング
-      const shiftPatternIdMap: { [key: string]: string } = {}
-      body.shift_patterns.forEach((pattern, index) => {
-        shiftPatternIdMap[String(index + 1)] = pattern.id
-      })
+      const shiftPatternIdMap = createIdMap(body.shift_patterns)
 
       console.log('Employee ID mapping:', employeeIdMap)
       console.log('Shift pattern ID mapping:', shiftPatternIdMap)

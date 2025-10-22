@@ -1,32 +1,23 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Clock, Plus, Edit, Trash2, Users, X, Save, AlertTriangle } from 'lucide-react'
+import React, { useState } from 'react'
+import { Clock, Plus, Edit, Trash2, X, Save, AlertTriangle } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
-import { supabase } from '@/lib/supabase'
 import type { ShiftPattern, ShiftSymbol } from '@/types'
-
-interface Employee {
-  id: string
-  name: string
-  employee_number: string | null
-}
 
 const ShiftPatternPage: React.FC = () => {
   // Contextからデータ取得
   const { shiftPatterns, addShiftPattern, updateShiftPattern, deleteShiftPattern } = useShiftData()
-  
+
   // 状態管理
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [editingPattern, setEditingPattern] = useState<ShiftPattern | null>(null)
   const [deletingPattern, setDeletingPattern] = useState<ShiftPattern | null>(null)
-  const [employees, setEmployees] = useState<Employee[]>([])
-  const [isLoadingEmployees, setIsLoadingEmployees] = useState(true)
-  
+
   // 利用可能な記号リスト（6種類）
   const availableSymbols: ShiftSymbol[] = ['○', '▲', '◆', '✕', '■', '▶']
-  
+
   // フォームデータ
   const [formData, setFormData] = useState({
     name: '',
@@ -34,37 +25,8 @@ const ShiftPatternPage: React.FC = () => {
     endTime: '',
     workingHours: 0,
     breakMinutes: 60,
-    symbol: '○' as ShiftSymbol,
-    applicableStaff: [] as string[]
+    symbol: '○' as ShiftSymbol
   })
-
-  // 従業員データを取得
-  useEffect(() => {
-    fetchEmployees()
-  }, [])
-
-  const fetchEmployees = async () => {
-    try {
-      setIsLoadingEmployees(true)
-      const { data, error } = await supabase
-        .from('employees')
-        .select('id, name, employee_number')
-        .eq('is_system_account', false)
-        .order('name')
-
-      if (error) {
-        console.error('従業員データ取得エラー:', error)
-        setEmployees([])
-      } else {
-        setEmployees(data || [])
-      }
-    } catch (error) {
-      console.error('従業員データ取得エラー:', error)
-      setEmployees([])
-    } finally {
-      setIsLoadingEmployees(false)
-    }
-  }
 
   // 記号の色設定（6種類）
   const getSymbolColor = (symbol: ShiftSymbol): string => {
@@ -90,7 +52,6 @@ const ShiftPatternPage: React.FC = () => {
       workingHours: pattern.workingHours,
       breakMinutes: pattern.breakMinutes || 60,
       symbol: pattern.symbol,
-      applicableStaff: pattern.applicableStaff || []
     })
     setIsEditModalOpen(true)
   }
@@ -105,7 +66,6 @@ const ShiftPatternPage: React.FC = () => {
       workingHours: 8,
       breakMinutes: 60,
       symbol: availableSymbols[0],
-      applicableStaff: []
     })
     setIsEditModalOpen(true)
   }
@@ -141,7 +101,6 @@ const ShiftPatternPage: React.FC = () => {
         workingHours: formData.workingHours,
         breakMinutes: formData.breakMinutes,
         symbol: formData.symbol,
-        applicableStaff: formData.applicableStaff
       })
     } else {
       // 新規追加
@@ -152,22 +111,11 @@ const ShiftPatternPage: React.FC = () => {
         workingHours: formData.workingHours,
         breakMinutes: formData.breakMinutes,
         symbol: formData.symbol,
-        applicableStaff: formData.applicableStaff
       })
     }
 
     setIsEditModalOpen(false)
     setEditingPattern(null)
-  }
-
-  // スタッフ選択切り替え
-  const toggleStaff = (staff: string) => {
-    setFormData(prev => ({
-      ...prev,
-      applicableStaff: prev.applicableStaff.includes(staff)
-        ? prev.applicableStaff.filter(s => s !== staff)
-        : [...prev.applicableStaff, staff]
-    }))
   }
 
   return (
@@ -233,28 +181,6 @@ const ShiftPatternPage: React.FC = () => {
                   {/* 記号表示 */}
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${getSymbolColor(pattern.symbol)}`}>
                     {pattern.symbol}
-                  </div>
-                </div>
-
-                {/* 適用可能スタッフ */}
-                <div className="border-t border-gray-200 pt-4 mt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-semibold text-gray-700">適用可能スタッフ</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(pattern.applicableStaff || []).length > 0 ? (
-                      (pattern.applicableStaff || []).map((staff, index) => (
-                        <span
-                          key={index}
-                          className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium"
-                        >
-                          {staff}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-gray-500">スタッフが設定されていません</span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -373,38 +299,6 @@ const ShiftPatternPage: React.FC = () => {
                   </span>
                   <span className="text-sm text-gray-600">選択中の記号</span>
                 </div>
-              </div>
-
-              {/* 適用可能スタッフ */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">適用可能スタッフ</label>
-                {isLoadingEmployees ? (
-                  <div className="text-center py-4">
-                    <div className="text-gray-500">従業員情報を読み込み中...</div>
-                  </div>
-                ) : employees.length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <div className="text-gray-600 font-medium">登録された従業員がいません</div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      従業員管理から従業員を追加してください
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {employees.map(employee => (
-                      <label key={employee.id} className="flex items-center gap-3 p-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-indigo-500 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={formData.applicableStaff.includes(employee.name)}
-                          onChange={() => toggleStaff(employee.name)}
-                          className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                        />
-                        <span className="text-sm font-medium text-gray-700">{employee.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* ボタン */}

@@ -29,7 +29,6 @@ export interface ShiftPattern {
   endTime: string            // キャメルケースに統一
   workingHours: number       // 実労働時間
   breakMinutes?: number      // 休憩時間（分）
-  applicableStaff?: string[] // 適用可能スタッフ
   color?: string             // 表示用カラー
 }
 
@@ -47,11 +46,11 @@ export interface Employee {
   max_hours_per_month: number   // 月最大労働時間（16日-15日）
   max_hours_per_week?: number   // 週最大労働時間（富沢の26時間制限）
 
-  // 認証関連フィールド（データベースに合わせてnull許容）
-  user_id?: string | null
-  employee_number?: string | null
-  password_changed?: boolean | null
-  is_system_account?: boolean | null
+  // 認証関連フィールド（アプリケーション層では常にデフォルト値を持つ）
+  user_id?: string
+  employee_number?: string
+  password_changed: boolean  // デフォルト: false
+  is_system_account: boolean  // デフォルト: false
 
   is_active: boolean
   created_at: string

@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
 import { supabase } from '@/lib/supabase'
 import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
 
@@ -15,8 +16,14 @@ interface ShiftAssignment {
 const ShiftPage: React.FC = () => {
   // Contextからデータを取得
   const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
-  
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 9, 1)) // 2025年10月
+
+  // 現在の年月の1日を取得
+  const getCurrentMonthStart = () => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  }
+
+  const [currentDate, setCurrentDate] = useState(getCurrentMonthStart())
   const [editMode, setEditMode] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingCell, setEditingCell] = useState<{employeeId: string, day: number, employeeName: string} | null>(null)
@@ -32,9 +39,7 @@ const ShiftPage: React.FC = () => {
   const [payrollPeriodShifts, setPayrollPeriodShifts] = useState<any[]>([])
 
   // システムアカウントを除外した従業員リスト
-  const filteredEmployees = useMemo(() => {
-    return employees.filter(employee => !employee.is_system_account)
-  }, [employees])
+  const filteredEmployees = useNonSystemEmployees(employees)
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -137,7 +142,12 @@ const ShiftPage: React.FC = () => {
       patternId: getPatternIdFromSymbol(editValues.symbol, employeeId)
     }
 
-    updateShift(employeeId, day, newShift)
+    // 現在表示中の年月を取得
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() + 1
+    const yearMonth = `${year}-${String(month).padStart(2, '0')}`
+
+    updateShift(employeeId, day, newShift, yearMonth)
     handleCloseModal()
   }
 
@@ -147,8 +157,9 @@ const ShiftPage: React.FC = () => {
     if (!employee || symbol === '×') return undefined
 
     // 従業員と記号に基づいてパターンを検索
-    const matchingPatterns = shiftPatterns.filter(p => 
-      p.symbol === symbol && p.applicableStaff?.includes(employee.name)
+    // 従業員が対応可能なシフトパターンの中から、記号が一致するものを探す
+    const matchingPatterns = shiftPatterns.filter(p =>
+      p.symbol === symbol && employee.assignable_shift_pattern_ids.includes(p.id)
     )
 
     return matchingPatterns.length > 0 ? matchingPatterns[0].id : undefined
@@ -253,7 +264,6 @@ const ShiftPage: React.FC = () => {
     shiftPatterns.forEach(pattern => {
       symbolsSet.add(pattern.symbol)
     })
-    symbolsSet.add('×') // 休みは常に追加
     return Array.from(symbolsSet)
   }
 
@@ -350,12 +360,6 @@ const ShiftPage: React.FC = () => {
               </div>
             )
           })}
-          <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg">
-            <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold">×</div>
-            <div className="flex flex-col">
-              <span className="text-red-800 font-medium">休み</span>
-            </div>
-          </div>
         </div>
       </div>
 
