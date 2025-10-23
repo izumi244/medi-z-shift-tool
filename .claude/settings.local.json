@@ -16,7 +16,9 @@
       "Bash(del \"c:\\Users\\tooth\\Downloads\\事務シフト\\lib\\auth.ts\")",
       "Bash(git branch:*)",
       "Bash(git push:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)"
     ],
     "deny": [],
     "ask": []
