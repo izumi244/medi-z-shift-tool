@@ -376,6 +376,37 @@ export async function POST(request: NextRequest) {
       console.log('Original shifts:', convertedShifts.length)
       console.log('After validation:', finalShifts.length, '(removed', convertedShifts.length - finalShifts.length, 'invalid shifts)')
       console.log('Validated first shift:', shiftData.shifts[0])
+
+      // 日付の検証と修正：AIが間違った月を返した場合、正しい月に修正
+      const [targetYear, targetMonth] = body.target_month.split('-').map(Number)
+      const correctedShifts = finalShifts.map((shift: any) => {
+        const shiftDate = new Date(shift.date)
+        const shiftYear = shiftDate.getFullYear()
+        const shiftMonth = shiftDate.getMonth() + 1
+
+        // 月が一致しない場合、日付を修正
+        if (shiftYear !== targetYear || shiftMonth !== targetMonth) {
+          const shiftDay = shiftDate.getDate()
+          const correctedDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(shiftDay).padStart(2, '0')}`
+
+          // 修正した日付が営業日カレンダーに存在するか確認
+          const isValidDate = businessCalendar.some(cal => cal.date === correctedDate)
+
+          if (isValidDate) {
+            console.log(`Date corrected: ${shift.date} → ${correctedDate}`)
+            return { ...shift, date: correctedDate }
+          } else {
+            console.warn(`Invalid corrected date ${correctedDate}, skipping shift`)
+            return null
+          }
+        }
+
+        return shift
+      }).filter(Boolean) // null を除外
+
+      shiftData.shifts = correctedShifts
+      console.log('After date correction:', correctedShifts.length, 'shifts')
+      console.log('Corrected first shift:', shiftData.shifts[0])
     }
 
     return NextResponse.json({
