@@ -205,6 +205,11 @@ export async function POST(request: NextRequest) {
     console.log('Dify full text length:', fullText.length)
     console.log('Dify full text preview:', fullText.substring(0, 500))
 
+    // フルテキストが短い場合は全て表示
+    if (fullText.length < 1000) {
+      console.log('Dify full text (complete):', fullText)
+    }
+
     // テキストからJSON部分を抽出
     let shiftData
     try {
@@ -230,6 +235,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (parseError) {
       console.error('JSON parse error:', parseError)
+      console.error('Parse error message:', parseError instanceof Error ? parseError.message : String(parseError))
       console.error('Full text:', fullText)
 
       // JSONパースに失敗した場合、部分的にでもデータを抽出する試み

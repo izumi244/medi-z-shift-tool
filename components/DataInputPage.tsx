@@ -166,7 +166,7 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       console.log('shifts length:', result.data?.shifts?.length)
       console.log('DEBUG情報:', result.debug)
 
-      if (result.success && result.data.shifts) {
+      if (result.success && result.data.shifts && result.data.shifts.length > 0) {
         // Supabaseにシフトを保存
         await saveGeneratedShifts(result.data.shifts)
 
@@ -177,7 +177,13 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
           onNavigate('shift', targetMonth)
         }
       } else {
-        throw new Error('シフト生成に失敗しました')
+        console.error('シフト生成失敗の詳細:', {
+          success: result.success,
+          shiftsCount: result.data?.shifts?.length,
+          debug: result.debug,
+          fullResult: result
+        })
+        throw new Error(`シフト生成に失敗しました。生成されたシフト数: ${result.data?.shifts?.length || 0}`)
       }
 
     } catch (error) {
