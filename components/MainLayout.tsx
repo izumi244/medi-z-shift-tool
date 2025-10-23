@@ -94,12 +94,13 @@ const getFilteredMenuItems = (userRole: UserRole): MenuItem[] => {
 export default function MainLayout({ children }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [currentPage, setCurrentPage] = useState<PageType>('dataInput')
-  
+  const [targetMonth, setTargetMonth] = useState<string | undefined>(undefined)
+
   // 認証情報を取得
   const { user, logout } = useAuth()
 
-  // ページ遷移ハンドラー
-  const handleNavigate = (pageId: string) => {
+  // ページ遷移ハンドラー（対象月を受け取れるように拡張）
+  const handleNavigate = (pageId: string, month?: string) => {
     // カードのIDをPageTypeに変換
     const pageMap: Record<string, PageType> = {
       'employee': 'employee',
@@ -109,10 +110,13 @@ export default function MainLayout({ children }: LayoutProps) {
       'shift-pattern': 'shiftPattern',
       'shiftPattern': 'shiftPattern'
     }
-    
+
     const targetPage = pageMap[pageId] || pageId as PageType
     if (targetPage) {
       setCurrentPage(targetPage)
+      if (month) {
+        setTargetMonth(month)
+      }
     }
   }
 
@@ -128,7 +132,7 @@ export default function MainLayout({ children }: LayoutProps) {
       case 'constraints':
         return <ConstraintsPage />
       case 'shift':
-        return <ShiftPage />
+        return <ShiftPage initialMonth={targetMonth} />
       case 'shiftPattern':
         return <ShiftPatternPage />
       default:

@@ -13,12 +13,20 @@ interface ShiftAssignment {
   reason?: string
 }
 
-const ShiftPage: React.FC = () => {
+interface ShiftPageProps {
+  initialMonth?: string // YYYY-MM format
+}
+
+const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   // Contextからデータを取得
   const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
 
   // 現在の年月の1日を取得
   const getCurrentMonthStart = () => {
+    if (initialMonth) {
+      const [year, month] = initialMonth.split('-').map(Number)
+      return new Date(year, month - 1, 1)
+    }
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   }

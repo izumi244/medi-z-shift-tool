@@ -25,7 +25,7 @@ interface ManagementCard {
 }
 
 interface DataInputPageProps {
-  onNavigate?: (page: string) => void
+  onNavigate?: (page: string, month?: string) => void
 }
 
 export default function DataInputPage({ onNavigate }: DataInputPageProps) {
@@ -132,19 +132,24 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       ].filter(Boolean).join('\n') || '特になし'
 
       console.log('送信する制約条件:\n', allConstraints)
+      console.log('対象月:', targetMonth)
+
+      const requestBody = {
+        target_month: targetMonth,
+        employees: employeesWithIndex,
+        leave_requests: leaveRequests,
+        shift_patterns: shiftPatternsWithIndex,
+        constraints: allConstraints,
+      }
+
+      console.log('APIリクエストボディ:', requestBody)
 
       const response = await fetch('/api/generate-shift', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          target_month: targetMonth,
-          employees: employeesWithIndex,
-          leave_requests: leaveRequests,
-          shift_patterns: shiftPatternsWithIndex,
-          constraints: allConstraints,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -166,9 +171,9 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
 
         alert(`${targetMonth}のシフトを作成しました！\n生成されたシフト数: ${result.data.shifts.length}`)
 
-        // シフト表示ページに遷移
+        // シフト表示ページに遷移（対象月を渡す）
         if (onNavigate) {
-          onNavigate('shift')
+          onNavigate('shift', targetMonth)
         }
       } else {
         throw new Error('シフト生成に失敗しました')
