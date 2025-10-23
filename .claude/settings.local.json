@@ -13,7 +13,10 @@
       "Bash(del nul)",
       "Bash(git commit:*)",
       "Bash(git push)",
-      "Bash(del \"c:\\Users\\tooth\\Downloads\\事務シフト\\lib\\auth.ts\")"
+      "Bash(del \"c:\\Users\\tooth\\Downloads\\事務シフト\\lib\\auth.ts\")",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
