@@ -150,7 +150,8 @@ const EmployeePage: React.FC = () => {
           assignable_shift_pattern_ids: formData.assignable_shift_pattern_ids,
           max_days_per_week: formData.max_days_per_week,
           max_hours_per_month: formData.max_hours_per_month,
-          max_hours_per_week: formData.max_hours_per_week
+          max_hours_per_week: formData.max_hours_per_week,
+          is_system_account: false
         })
         
         // アカウント情報モーダルを表示

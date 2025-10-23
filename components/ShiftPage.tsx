@@ -354,7 +354,7 @@ const ShiftPage: React.FC = () => {
                 <div className="flex flex-col">
                   <span className={`${getPatternTextColor(pattern.symbol)} font-medium`}>{pattern.name}</span>
                   <span className={`text-xs ${getPatternTextColor(pattern.symbol)} opacity-80`}>
-                    {pattern.start_time}-{pattern.end_time}
+                    {pattern.startTime}-{pattern.endTime}
                   </span>
                 </div>
               </div>

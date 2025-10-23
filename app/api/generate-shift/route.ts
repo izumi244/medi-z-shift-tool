@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createIdMap } from '@/utils/employeeUtils'
+import type { Employee } from '@/types'
 
 // 週のキーを取得（月曜日始まり）
 function getWeekKey(date: Date): string {
@@ -326,7 +327,7 @@ export async function POST(request: NextRequest) {
         const dayOfWeek = shiftDate.getDay() // 0=日, 1=月, 2=火, 3=水, 4=木, 5=金, 6=土
 
         // 1. 従業員の勤務可能曜日チェック
-        const employee = body.employees.find((emp: any) => emp.uuid === shift.employee_id)
+        const employee = body.employees.find((emp: any) => (emp.uuid || emp.id) === shift.employee_id) as Employee | undefined
         if (employee && employee.available_days) {
           const dayNames = ['日', '月', '火', '水', '木', '金', '土']
           const shiftDayName = dayNames[dayOfWeek]
@@ -345,7 +346,7 @@ export async function POST(request: NextRequest) {
       const weeklyShiftCounts: { [key: string]: { [week: string]: number } } = {}
 
       validatedShifts.forEach((shift: any) => {
-        const employee = body.employees.find((emp: any) => emp.uuid === shift.employee_id)
+        const employee = body.employees.find((emp: any) => (emp.uuid || emp.id) === shift.employee_id) as Employee | undefined
         if (!employee) return
 
         const shiftDate = new Date(shift.date)

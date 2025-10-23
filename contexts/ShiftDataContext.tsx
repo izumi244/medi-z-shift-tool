@@ -191,11 +191,15 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
       if (error) throw error
       
       // Supabaseの型からアプリの型に変換（型安全な変換関数を使用）
-      const employeeData: Employee[] = (data || []).map(emp => toDomainEmployee({
-        ...emp,
-        available_days: emp.available_days || [],
-        assignable_shift_pattern_ids: emp.assignable_shift_pattern_ids || [],
-      } as import('@/types/database').DatabaseEmployee))
+      const employeeData: Employee[] = (data || []).map(emp => {
+        const empData = emp as any
+        return toDomainEmployee({
+          ...empData,
+          available_days: empData.available_days || [],
+          assignable_shift_pattern_ids: empData.assignable_shift_pattern_ids || [],
+          is_active: empData.is_active ?? true,
+        } as import('@/types/database').DatabaseEmployee)
+      })
       
       setEmployees(employeeData)
     } catch (error) {
