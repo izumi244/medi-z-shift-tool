@@ -107,11 +107,13 @@ export async function POST(request: NextRequest) {
     })
 
     console.log('Detected closed days:', closedDays)
+    console.log('Target month received:', body.target_month)
 
     // 営業日カレンダーを生成（休診日を除外）
     const businessCalendar = generateBusinessCalendar(body.target_month, closedDays)
     console.log('Business calendar generated:', businessCalendar.length, 'days')
     console.log('Calendar first 3 days:', JSON.stringify(businessCalendar.slice(0, 3), null, 2))
+    console.log('Calendar last 3 days:', JSON.stringify(businessCalendar.slice(-3), null, 2))
 
     // シンプルなカレンダーフォーマット（日付のみ、LLMが理解しやすい）
     const calendarSimple = `営業日一覧（この日付のみ使用可能）:\n${businessCalendar.map(d => d.date).join('\n')}`
@@ -379,6 +381,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: shiftData,
+      debug: {
+        target_month: body.target_month,
+        calendar_first_date: businessCalendar[0]?.date,
+        calendar_last_date: businessCalendar[businessCalendar.length - 1]?.date,
+        calendar_length: businessCalendar.length
+      }
     })
 
   } catch (error) {

@@ -164,6 +164,7 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       console.log('result.data:', result.data)
       console.log('result.data.shifts:', result.data?.shifts)
       console.log('shifts length:', result.data?.shifts?.length)
+      console.log('DEBUG情報:', result.debug)
 
       if (result.success && result.data.shifts) {
         // Supabaseにシフトを保存
