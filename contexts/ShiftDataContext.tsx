@@ -396,7 +396,14 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         .insert(shiftsToInsert)
         .select()
 
+      console.log('Supabase insert response:', { data: insertedData, error: insertError })
+
       if (insertError) {
+        console.error('シフト挿入エラー詳細:', insertError)
+        console.error('エラーコード:', insertError.code)
+        console.error('エラーメッセージ:', insertError.message)
+        console.error('エラー詳細:', insertError.details)
+        console.error('エラーヒント:', insertError.hint)
         logError('シフト挿入', insertError)
         throw insertError
       }
