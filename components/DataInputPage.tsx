@@ -154,6 +154,12 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
 
       const result = await response.json()
 
+      console.log('APIレスポンス:', result)
+      console.log('result.success:', result.success)
+      console.log('result.data:', result.data)
+      console.log('result.data.shifts:', result.data?.shifts)
+      console.log('shifts length:', result.data?.shifts?.length)
+
       if (result.success && result.data.shifts) {
         // Supabaseにシフトを保存
         await saveGeneratedShifts(result.data.shifts)
