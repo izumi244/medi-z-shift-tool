@@ -71,60 +71,61 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   const monthName = currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-  // 今月のシフトデータと労働時間集計期間のシフトデータを取得
-  useEffect(() => {
-    const fetchShiftsData = async () => {
-      const prevMonth = month === 0 ? 11 : month - 1
-      const prevYear = month === 0 ? year - 1 : year
+  // シフトデータを取得する関数
+  const fetchShiftsData = async () => {
+    const prevMonth = month === 0 ? 11 : month - 1
+    const prevYear = month === 0 ? year - 1 : year
 
-      // 表示月の最初の日（1日）が含まれる週の月曜日を取得
-      const firstDayOfMonth = new Date(year, month, 1)
-      const firstDayOfWeek = firstDayOfMonth.getDay() // 0=日, 1=月, ..., 6=土
-      const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
-      const firstMonday = new Date(year, month, 1 - daysToMonday)
+    // 表示月の最初の日（1日）が含まれる週の月曜日を取得
+    const firstDayOfMonth = new Date(year, month, 1)
+    const firstDayOfWeek = firstDayOfMonth.getDay() // 0=日, 1=月, ..., 6=土
+    const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+    const firstMonday = new Date(year, month, 1 - daysToMonday)
 
-      // 表示月の最終日が含まれる週の日曜日を取得
-      const lastDayOfMonth = new Date(year, month + 1, 0)
-      const lastDayOfWeek = lastDayOfMonth.getDay()
-      const daysToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek
-      const lastSunday = new Date(year, month + 1, 0 + daysToSunday)
+    // 表示月の最終日が含まれる週の日曜日を取得
+    const lastDayOfMonth = new Date(year, month + 1, 0)
+    const lastDayOfWeek = lastDayOfMonth.getDay()
+    const daysToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek
+    const lastSunday = new Date(year, month + 1, 0 + daysToSunday)
 
-      // 拡張されたデータ取得範囲（表示月を含む全週）
-      const extendedStart = `${firstMonday.getFullYear()}-${String(firstMonday.getMonth() + 1).padStart(2, '0')}-${String(firstMonday.getDate()).padStart(2, '0')}`
-      const extendedEnd = `${lastSunday.getFullYear()}-${String(lastSunday.getMonth() + 1).padStart(2, '0')}-${String(lastSunday.getDate()).padStart(2, '0')}`
+    // 拡張されたデータ取得範囲（表示月を含む全週）
+    const extendedStart = `${firstMonday.getFullYear()}-${String(firstMonday.getMonth() + 1).padStart(2, '0')}-${String(firstMonday.getDate()).padStart(2, '0')}`
+    const extendedEnd = `${lastSunday.getFullYear()}-${String(lastSunday.getMonth() + 1).padStart(2, '0')}-${String(lastSunday.getDate()).padStart(2, '0')}`
 
-      const { data: currentData, error: currentError } = await supabase
-        .from('shifts')
-        .select('*, shift_patterns(*)')
-        .gte('date', extendedStart)
-        .lte('date', extendedEnd)
+    const { data: currentData, error: currentError } = await supabase
+      .from('shifts')
+      .select('*, shift_patterns(*)')
+      .gte('date', extendedStart)
+      .lte('date', extendedEnd)
 
-      if (currentError) {
-        console.error('シフト取得エラー:', currentError)
-      } else {
-        setCurrentMonthShifts(currentData || [])
-        console.log(`${year}年${month + 1}月のシフト（拡張範囲）:`, currentData?.length, '件')
-        console.log('取得範囲:', extendedStart, '〜', extendedEnd)
-      }
-
-      // 前月16日～今月15日のシフトデータを取得（労働時間集計期間）
-      const payrollStart = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-16`
-      const payrollEnd = `${year}-${String(month + 1).padStart(2, '0')}-15`
-
-      const { data: payrollData, error: payrollError } = await supabase
-        .from('shifts')
-        .select('*, shift_patterns(*)')
-        .gte('date', payrollStart)
-        .lte('date', payrollEnd)
-
-      if (payrollError) {
-        console.error('労働時間集計期間のシフト取得エラー:', payrollError)
-      } else {
-        setPayrollPeriodShifts(payrollData || [])
-        console.log('労働時間集計期間のシフト:', payrollData?.length, '件')
-      }
+    if (currentError) {
+      console.error('シフト取得エラー:', currentError)
+    } else {
+      setCurrentMonthShifts(currentData || [])
+      console.log(`${year}年${month + 1}月のシフト（拡張範囲）:`, currentData?.length, '件')
+      console.log('取得範囲:', extendedStart, '〜', extendedEnd)
     }
 
+    // 前月16日～今月15日のシフトデータを取得（労働時間集計期間）
+    const payrollStart = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-16`
+    const payrollEnd = `${year}-${String(month + 1).padStart(2, '0')}-15`
+
+    const { data: payrollData, error: payrollError } = await supabase
+      .from('shifts')
+      .select('*, shift_patterns(*)')
+      .gte('date', payrollStart)
+      .lte('date', payrollEnd)
+
+    if (payrollError) {
+      console.error('労働時間集計期間のシフト取得エラー:', payrollError)
+    } else {
+      setPayrollPeriodShifts(payrollData || [])
+      console.log('労働時間集計期間のシフト:', payrollData?.length, '件')
+    }
+  }
+
+  // 今月のシフトデータと労働時間集計期間のシフトデータを取得
+  useEffect(() => {
     fetchShiftsData()
   }, [year, month])
 
@@ -204,7 +205,12 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     const month = currentDate.getMonth() + 1
     const yearMonth = `${year}-${String(month).padStart(2, '0')}`
 
-    updateShift(employeeId, day, newShift, yearMonth)
+    // シフトを保存（完了を待つ）
+    await updateShift(employeeId, day, newShift, yearMonth)
+
+    // シフトデータを再取得して週間労働時間を更新
+    await fetchShiftsData()
+
     handleCloseModal()
   }
 

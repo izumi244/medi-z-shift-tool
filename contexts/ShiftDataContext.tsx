@@ -322,6 +322,7 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
           employee_id: employeeId,
           date: date,
           shift_symbol: shift.symbol,
+          shift_pattern_id: shift.patternId,
           updated_at: new Date().toISOString()
         })
 
