@@ -17,6 +17,20 @@ interface ShiftPageProps {
   initialMonth?: string // YYYY-MM format
 }
 
+// 週のキーを取得（月曜日始まり）
+function getWeekKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const day = date.getDate()
+  const dayOfWeek = date.getDay() // 0=日, 1=月, ..., 6=土
+
+  // 月曜日を週の始まりとして計算
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(year, month, day + mondayOffset)
+
+  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
+}
+
 const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   // Contextからデータを取得
   const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
@@ -35,10 +49,13 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   const [editMode, setEditMode] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingCell, setEditingCell] = useState<{employeeId: string, day: number, employeeName: string} | null>(null)
-  
-  const [editValues, setEditValues] = useState({
-    symbol: '○' as ShiftSymbol,
-    reason: ''
+
+  const [editValues, setEditValues] = useState<{
+    selectedPatternId: string | null
+    isDeleting: boolean
+  }>({
+    selectedPatternId: null,
+    isDeleting: false
   })
 
   // 今月のシフトデータ（表示用）
@@ -54,32 +71,43 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   const monthName = currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-  // 今月のシフトデータと給与計算期間のシフトデータを取得
+  // 今月のシフトデータと労働時間集計期間のシフトデータを取得
   useEffect(() => {
     const fetchShiftsData = async () => {
       const prevMonth = month === 0 ? 11 : month - 1
       const prevYear = month === 0 ? year - 1 : year
 
-      // 今月のシフトデータを取得（表示用）
-      const currentMonthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
-      // 月末日を正しく取得（28〜31日まで対応）
-      const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
-      const currentMonthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`
+      // 表示月の最初の日（1日）が含まれる週の月曜日を取得
+      const firstDayOfMonth = new Date(year, month, 1)
+      const firstDayOfWeek = firstDayOfMonth.getDay() // 0=日, 1=月, ..., 6=土
+      const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+      const firstMonday = new Date(year, month, 1 - daysToMonday)
+
+      // 表示月の最終日が含まれる週の日曜日を取得
+      const lastDayOfMonth = new Date(year, month + 1, 0)
+      const lastDayOfWeek = lastDayOfMonth.getDay()
+      const daysToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek
+      const lastSunday = new Date(year, month + 1, 0 + daysToSunday)
+
+      // 拡張されたデータ取得範囲（表示月を含む全週）
+      const extendedStart = `${firstMonday.getFullYear()}-${String(firstMonday.getMonth() + 1).padStart(2, '0')}-${String(firstMonday.getDate()).padStart(2, '0')}`
+      const extendedEnd = `${lastSunday.getFullYear()}-${String(lastSunday.getMonth() + 1).padStart(2, '0')}-${String(lastSunday.getDate()).padStart(2, '0')}`
 
       const { data: currentData, error: currentError } = await supabase
         .from('shifts')
         .select('*, shift_patterns(*)')
-        .gte('date', currentMonthStart)
-        .lte('date', currentMonthEnd)
+        .gte('date', extendedStart)
+        .lte('date', extendedEnd)
 
       if (currentError) {
-        console.error('今月のシフト取得エラー:', currentError)
+        console.error('シフト取得エラー:', currentError)
       } else {
         setCurrentMonthShifts(currentData || [])
-        console.log(`${year}年${month + 1}月のシフト:`, currentData?.length, '件')
+        console.log(`${year}年${month + 1}月のシフト（拡張範囲）:`, currentData?.length, '件')
+        console.log('取得範囲:', extendedStart, '〜', extendedEnd)
       }
 
-      // 前月16日～今月15日のシフトデータを取得（給与計算期間）
+      // 前月16日～今月15日のシフトデータを取得（労働時間集計期間）
       const payrollStart = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-16`
       const payrollEnd = `${year}-${String(month + 1).padStart(2, '0')}-15`
 
@@ -90,10 +118,10 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
         .lte('date', payrollEnd)
 
       if (payrollError) {
-        console.error('給与計算期間のシフト取得エラー:', payrollError)
+        console.error('労働時間集計期間のシフト取得エラー:', payrollError)
       } else {
         setPayrollPeriodShifts(payrollData || [])
-        console.log('給与計算期間のシフト:', payrollData?.length, '件')
+        console.log('労働時間集計期間のシフト:', payrollData?.length, '件')
       }
     }
 
@@ -129,25 +157,46 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
       return
     }
 
-    const shift = shiftData[employeeId]?.[day]
-    setEditingCell({employeeId, day, employeeName})
+    // 既存のシフトを取得
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    const existingShift = currentMonthShifts.find(s => s.employee_id === employeeId && s.date === dateStr)
 
+    setEditingCell({employeeId, day, employeeName})
     setEditValues({
-      symbol: shift?.symbol || '○',
-      reason: shift?.reason || ''
+      selectedPatternId: existingShift?.shift_pattern_id || null,
+      isDeleting: false
     })
     setIsEditModalOpen(true)
   }
 
   // 編集内容保存
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingCell) return
     const { employeeId, day } = editingCell
 
+    // 削除の場合
+    if (editValues.isDeleting) {
+      await handleDeleteShift()
+      return
+    }
+
+    // シフトパターンが選択されていない場合
+    if (!editValues.selectedPatternId) {
+      alert('シフトパターンを選択してください')
+      return
+    }
+
+    // 選択されたパターンから記号を取得
+    const selectedPattern = shiftPatterns.find(p => p.id === editValues.selectedPatternId)
+    if (!selectedPattern) {
+      alert('シフトパターンが見つかりません')
+      return
+    }
+
     const newShift: ShiftAssignment = {
-      symbol: editValues.symbol,
-      reason: editValues.symbol === '×' ? editValues.reason : undefined,
-      patternId: getPatternIdFromSymbol(editValues.symbol, employeeId)
+      symbol: selectedPattern.symbol,
+      patternId: editValues.selectedPatternId,
+      reason: undefined
     }
 
     // 現在表示中の年月を取得
@@ -159,23 +208,47 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     handleCloseModal()
   }
 
-  // 記号からパターンIDを取得（動的に判定）
-  const getPatternIdFromSymbol = (symbol: ShiftSymbol, employeeId: string): string | undefined => {
-    const employee = filteredEmployees.find(e => e.id === employeeId)
-    if (!employee || symbol === '×') return undefined
+  // シフト削除
+  const handleDeleteShift = async () => {
+    if (!editingCell) return
 
-    // 従業員と記号に基づいてパターンを検索
-    // 従業員が対応可能なシフトパターンの中から、記号が一致するものを探す
-    const matchingPatterns = shiftPatterns.filter(p =>
-      p.symbol === symbol && employee.assignable_shift_pattern_ids.includes(p.id)
+    if (!confirm('このシフトを削除しますか？')) {
+      return
+    }
+
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(editingCell.day).padStart(2, '0')}`
+    const existingShift = currentMonthShifts.find(
+      s => s.employee_id === editingCell.employeeId && s.date === dateStr
     )
 
-    return matchingPatterns.length > 0 ? matchingPatterns[0].id : undefined
+    if (existingShift) {
+      try {
+        const { error } = await supabase
+          .from('shifts')
+          .delete()
+          .eq('id', existingShift.id)
+
+        if (error) throw error
+
+        // ローカルの状態を更新
+        setCurrentMonthShifts(prev => prev.filter(s => s.id !== existingShift.id))
+        alert('シフトを削除しました')
+      } catch (error) {
+        console.error('シフト削除エラー:', error)
+        alert('シフトの削除に失敗しました')
+      }
+    }
+
+    handleCloseModal()
   }
 
   const handleCloseModal = () => {
     setIsEditModalOpen(false)
     setEditingCell(null)
+    setEditValues({
+      selectedPatternId: null,
+      isDeleting: false
+    })
   }
 
   const changeMonth = (direction: 'prev' | 'next') => {
@@ -241,13 +314,55 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     )
   }
 
+  // 表示月に含まれる週のリストを生成（月曜始まり）
+  const getWeeksInMonth = () => {
+    const weeks: { start: Date; end: Date; weekKey: string }[] = []
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+
+    // 最初の週の月曜日を取得
+    const firstDayOfWeek = firstDay.getDay()
+    const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+    let currentMonday = new Date(year, month, 1 - daysToMonday)
+
+    // 最終週の日曜日を取得
+    const lastDayOfWeek = lastDay.getDay()
+    const daysToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek
+    const finalSunday = new Date(year, month + 1, 0 + daysToSunday)
+
+    // 週ごとにループ
+    while (currentMonday <= finalSunday) {
+      const weekStart = new Date(currentMonday)
+      const weekEnd = new Date(currentMonday)
+      weekEnd.setDate(weekEnd.getDate() + 6) // 日曜日
+
+      weeks.push({
+        start: weekStart,
+        end: weekEnd,
+        weekKey: getWeekKey(weekStart)
+      })
+
+      currentMonday.setDate(currentMonday.getDate() + 7) // 次の月曜日
+    }
+
+    return weeks
+  }
+
   // 労働時間統計計算（今月の予定出勤日数と前月16日～今月15日の勤務時間）
   const calculateMonthlyStats = (employeeId: string) => {
-    // 今月の予定出勤日数を計算
-    const employeeCurrentShifts = currentMonthShifts.filter(s => s.employee_id === employeeId)
+    // 今月の予定出勤日数を計算（暦月ベース）
+    const currentMonthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+    const currentMonthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`
+
+    const employeeCurrentShifts = currentMonthShifts.filter(s =>
+      s.employee_id === employeeId &&
+      s.date >= currentMonthStart &&
+      s.date <= currentMonthEnd
+    )
     const totalDays = employeeCurrentShifts.filter(s => s.shift_symbol !== '×').length
 
-    // 前月16日～今月15日の勤務時間を計算（給与計算期間）
+    // 前月16日～今月15日の勤務時間を計算（労働時間集計期間）
     let totalHours = 0
     const employeePayrollShifts = payrollPeriodShifts.filter(s => s.employee_id === employeeId)
 
@@ -261,18 +376,46 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     return { totalDays, totalHours: Math.round(totalHours * 10) / 10 }
   }
 
+  // 週ごとの労働時間と勤務日数を計算
+  const calculateWeeklyStats = (employeeId: string, weekStart: Date, weekEnd: Date) => {
+    const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`
+    const weekEndStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}`
+
+    const employeeWeekShifts = currentMonthShifts.filter(s =>
+      s.employee_id === employeeId &&
+      s.date >= weekStartStr &&
+      s.date <= weekEndStr
+    )
+
+    let weekHours = 0
+    let weekDays = 0
+    employeeWeekShifts.forEach(shift => {
+      if (shift.shift_symbol !== '×' && shift.shift_patterns) {
+        const workMinutes = shift.shift_patterns.work_minutes || 0
+        weekHours += workMinutes / 60
+        weekDays++
+      }
+    })
+
+    return {
+      hours: Math.round(weekHours * 10) / 10,
+      days: weekDays
+    }
+  }
+
   // 従業員の制約表示
   const getEmployeeTypeDisplay = (employee: Employee): string => {
     return `週${employee.max_days_per_week}日・月${employee.max_hours_per_month}h`
   }
 
-  // 利用可能なシフト記号を取得
-  const getAvailableSymbols = (): ShiftSymbol[] => {
-    const symbolsSet = new Set<ShiftSymbol>()
-    shiftPatterns.forEach(pattern => {
-      symbolsSet.add(pattern.symbol)
-    })
-    return Array.from(symbolsSet)
+  // 従業員が利用可能なシフトパターンを取得
+  const getAvailablePatternsForEmployee = (employeeId: string) => {
+    const employee = filteredEmployees.find(e => e.id === employeeId)
+    if (!employee) return []
+
+    return shiftPatterns.filter(p =>
+      employee.assignable_shift_pattern_ids.includes(p.id)
+    )
   }
 
   return (
@@ -396,17 +539,77 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
             <tbody>
               {filteredEmployees.map(employee => {
                 const stats = calculateMonthlyStats(employee.id)
+                const weeks = getWeeksInMonth()
+
                 return (
-                  <tr key={employee.id} className="border-b border-gray-200">
-                    <td className="sticky left-0 bg-white border-r border-gray-200 p-3 z-10">
-                      <div className="text-sm font-semibold text-gray-800">{employee.name}</div>
-                      <div className="text-xs text-gray-600">{getEmployeeTypeDisplay(employee)}</div>
-                      <div className="text-xs text-gray-500">{stats.totalDays}日・{stats.totalHours}h</div>
-                    </td>
-                    {days.map(({ day, isSaturday, isSunday, dayOfWeek }) => 
-                      renderShiftCell(employee, day, { isSaturday, isSunday, dayOfWeek })
-                    )}
-                  </tr>
+                  <React.Fragment key={employee.id}>
+                    {/* 従業員のシフト行 */}
+                    <tr className="border-b border-gray-100">
+                      <td className="sticky left-0 bg-white border-r border-gray-200 p-3 z-10">
+                        <div className="text-sm font-semibold text-gray-800">{employee.name}</div>
+                        <div className="text-xs text-gray-600">{getEmployeeTypeDisplay(employee)}</div>
+                        <div className={`text-xs font-semibold mt-1 ${
+                          stats.totalHours > employee.max_hours_per_month
+                            ? 'text-red-600'
+                            : 'text-blue-700'
+                        }`}>
+                          {stats.totalHours}h / {employee.max_hours_per_month}h
+                          {stats.totalHours > employee.max_hours_per_month && ' ⚠️'}
+                        </div>
+                      </td>
+                      {days.map(({ day, isSaturday, isSunday, dayOfWeek }) =>
+                        renderShiftCell(employee, day, { isSaturday, isSunday, dayOfWeek })
+                      )}
+                    </tr>
+
+                    {/* 週間労働時間表示行 */}
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <td className="sticky left-0 bg-gray-50 border-r border-gray-200 p-2 z-10">
+                        <div className="text-xs text-gray-600">勤務日数・労働時間</div>
+                      </td>
+                      {weeks.map((week, weekIndex) => {
+                        const weekStats = calculateWeeklyStats(employee.id, week.start, week.end)
+                        const hasMaxWeeklyHours = employee.max_hours_per_week !== undefined && employee.max_hours_per_week !== null
+                        const hasMaxDaysPerWeek = employee.max_days_per_week !== undefined && employee.max_days_per_week !== null
+
+                        const isWeeklyHoursOverLimit = hasMaxWeeklyHours && weekStats.hours > employee.max_hours_per_week!
+                        const isWeeklyDaysOverLimit = hasMaxDaysPerWeek && weekStats.days > employee.max_days_per_week!
+                        const isWeeklyOverLimit = isWeeklyHoursOverLimit || isWeeklyDaysOverLimit
+
+                        // この週に含まれる日数を計算
+                        const daysInWeek = days.filter(({ day }) => {
+                          const date = new Date(year, month, day)
+                          return date >= week.start && date <= week.end
+                        })
+
+                        return (
+                          <td
+                            key={weekIndex}
+                            colSpan={daysInWeek.length}
+                            className="p-2 text-center border-r border-gray-200"
+                          >
+                            <div className={`text-xs font-semibold inline-block px-2 py-1 rounded ${
+                              isWeeklyOverLimit
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}>
+                              {hasMaxDaysPerWeek
+                                ? `${weekStats.days}日 / ${employee.max_days_per_week}日`
+                                : `${weekStats.days}日`
+                              }
+                              {isWeeklyDaysOverLimit && ' ⚠️'}
+                              {' ・ '}
+                              {hasMaxWeeklyHours
+                                ? `${weekStats.hours}h / ${employee.max_hours_per_week}h`
+                                : `${weekStats.hours}h`
+                              }
+                              {isWeeklyHoursOverLimit && ' ⚠️'}
+                            </div>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  </React.Fragment>
                 )
               })}
             </tbody>
@@ -430,44 +633,81 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
             </div>
 
             <div className="p-6 space-y-4">
+              {/* シフトパターン選択 */}
               <div>
-                <div className="block text-sm font-semibold text-gray-700 mb-3">記号選択</div>
-                <div className="grid grid-cols-2 gap-3">
-                  {getAvailableSymbols().map((symbol) => (
-                    <button
-                      key={symbol}
-                      type="button"
-                      onClick={() => setEditValues(prev => ({ ...prev, symbol: symbol as ShiftSymbol }))}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        editValues.symbol === symbol
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-2xl font-bold mb-1">{symbol}</div>
-                    </button>
-                  ))}
+                <div className="block text-sm font-semibold text-gray-700 mb-3">シフトパターン選択</div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {editingCell && getAvailablePatternsForEmployee(editingCell.employeeId).map((pattern) => {
+                    const isSelected = editValues.selectedPatternId === pattern.id
+
+                    // 記号の色を取得
+                    const getSymbolBgColor = (symbol: ShiftSymbol) => {
+                      switch (symbol) {
+                        case '○': return 'bg-blue-100 text-blue-600'
+                        case '▲': return 'bg-green-100 text-green-600'
+                        case '◆': return 'bg-purple-100 text-purple-600'
+                        case '✕': return 'bg-orange-100 text-orange-600'
+                        case '■': return 'bg-gray-100 text-gray-600'
+                        case '▶': return 'bg-yellow-100 text-yellow-600'
+                        default: return 'bg-gray-100 text-gray-600'
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={pattern.id}
+                        type="button"
+                        onClick={() => setEditValues({ selectedPatternId: pattern.id, isDeleting: false })}
+                        className={`w-full p-3 rounded-xl border-2 transition-all text-left flex items-center gap-3 ${
+                          isSelected
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-full ${getSymbolBgColor(pattern.symbol)} flex items-center justify-center font-bold text-lg flex-shrink-0`}>
+                          {pattern.symbol}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-800">{pattern.name}</div>
+                          <div className="text-sm text-gray-600">{pattern.startTime} - {pattern.endTime}</div>
+                        </div>
+                        {isSelected && (
+                          <div className="text-indigo-600">
+                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
-              {editValues.symbol === '×' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">休みの理由</label>
-                  <select
-                    value={editValues.reason}
-                    onChange={(e) => setEditValues(prev => ({ ...prev, reason: e.target.value }))}
-                    className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors text-gray-900"
+              {/* 既存シフトがある場合のみ削除ボタン表示 */}
+              {editingCell && currentMonthShifts.find(s =>
+                s.employee_id === editingCell.employeeId &&
+                s.date === `${year}-${String(month + 1).padStart(2, '0')}-${String(editingCell.day).padStart(2, '0')}`
+              ) && (
+                <div className="border-t border-gray-200 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditValues({ selectedPatternId: null, isDeleting: true })}
+                    className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${
+                      editValues.isDeleting
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-200 hover:border-red-300 bg-white text-gray-700 hover:text-red-600'
+                    }`}
                   >
-                    <option value="">選択してください</option>
-                    <option value="希望休">希望休</option>
-                    <option value="有給">有給</option>
-                    <option value="休み">休み</option>
-                    <option value="忌引">忌引</option>
-                    <option value="病欠">病欠</option>
-                  </select>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    このシフトを削除
+                  </button>
                 </div>
               )}
 
+              {/* アクションボタン */}
               <div className="flex gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
@@ -479,10 +719,28 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
                 <button
                   type="button"
                   onClick={handleSaveEdit}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2"
+                  disabled={!editValues.selectedPatternId && !editValues.isDeleting}
+                  className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
+                    editValues.selectedPatternId || editValues.isDeleting
+                      ? editValues.isDeleting
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
                 >
-                  <Save className="w-4 h-4" />
-                  保存
+                  {editValues.isDeleting ? (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      削除
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      保存
+                    </>
+                  )}
                 </button>
               </div>
             </div>
