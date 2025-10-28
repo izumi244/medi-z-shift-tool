@@ -316,9 +316,11 @@ export default function MainLayout({ children }: LayoutProps) {
 
         {/* モバイルオーバーレイ */}
         {isMobileMenuOpen && (
-          <div
-            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+          <button
+            type="button"
+            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30 cursor-default"
             onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="メニューを閉じる"
           />
         )}
 
