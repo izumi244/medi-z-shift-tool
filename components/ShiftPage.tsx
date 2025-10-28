@@ -2,11 +2,12 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
+
 import { useShiftData } from '@/contexts/ShiftDataContext'
 import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
 import { supabase } from '@/lib/supabase'
-import { getWeekKey } from '@/utils/dateUtils'
 import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
+import { getWeekKey } from '@/utils/dateUtils'
 
 interface ShiftAssignment {
   symbol: ShiftSymbol
@@ -156,6 +157,7 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   // 今月のシフトデータと労働時間集計期間のシフトデータを取得
   useEffect(() => {
     fetchShiftsData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month])
 
   // カレンダー日付生成

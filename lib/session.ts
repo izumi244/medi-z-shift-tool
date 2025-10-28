@@ -1,5 +1,5 @@
-import { User } from '@/types'
 import { STORAGE_KEYS } from '@/lib/constants'
+import { User } from '@/types'
 
 export interface Session {
   user: User
