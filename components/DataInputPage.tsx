@@ -4,6 +4,7 @@ import { useState, ReactNode } from 'react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
 import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
 import { getCurrentYearMonth } from '@/utils/dateFormat'
+import { authenticatedPost } from '@/lib/api-client'
 
 import {
   Users,
@@ -144,20 +145,8 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
 
       console.log('APIリクエストボディ:', requestBody)
 
-      const response = await fetch('/api/generate-shift', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'シフト生成に失敗しました')
-      }
-
-      const result = await response.json()
+      // 認証付きAPIリクエスト
+      const result = await authenticatedPost('/api/generate-shift', requestBody)
 
       console.log('APIレスポンス:', result)
       console.log('result.success:', result.success)
@@ -197,20 +186,20 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
   return (
     <div className="space-y-8">
       {/* ページヘッダー */}
-      <div className="border-b-2 border-gray-100 pb-6">
-        <h2 className="text-3xl font-bold text-indigo-600 mb-2 flex items-center gap-3">
-          <Rocket className="w-8 h-8" />
+      <div className="border-b-2 border-gray-100 pb-4 md:pb-6">
+        <h2 className="text-2xl md:text-3xl font-bold text-indigo-600 mb-2 flex items-center gap-2 md:gap-3">
+          <Rocket className="w-6 h-6 md:w-8 md:h-8" />
           シフト作成
         </h2>
-        <p className="text-lg text-gray-600">
+        <p className="text-sm md:text-lg text-gray-600">
           管理機能へのアクセスとシフト作成
         </p>
       </div>
 
       {/* AIシフト作成セクション */}
-      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-8 border border-indigo-200">
-        <h3 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
-          <Bot className="w-7 h-7" />
+      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 md:p-8 border border-indigo-200">
+        <h3 className="text-xl md:text-2xl font-bold text-indigo-700 mb-4 md:mb-6 flex items-center gap-2 md:gap-3">
+          <Bot className="w-6 h-6 md:w-7 md:h-7" />
           AIシフト作成
         </h3>
         
@@ -246,7 +235,7 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
           <button
             onClick={handleGenerateShift}
             disabled={isGenerating}
-            className={`inline-flex items-center gap-3 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 ${
+            className={`inline-flex items-center gap-2 md:gap-3 px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition-all duration-300 ${
               isGenerating
                 ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                 : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
@@ -254,12 +243,12 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
           >
             {isGenerating ? (
               <>
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
+                <div className="animate-spin rounded-full h-5 w-5 md:h-6 md:w-6 border-b-2 border-white" />
                 作成中...
               </>
             ) : (
               <>
-                <Play className="w-6 h-6" />
+                <Play className="w-5 h-5 md:w-6 md:h-6" />
                 AIシフト作成開始
               </>
             )}
@@ -268,22 +257,22 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       </div>
 
       {/* 管理機能カード */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {managementCards.map((card) => (
           <button
             key={card.id}
             onClick={() => handleCardClick(card.id)}
-            className={`group relative overflow-hidden p-8 rounded-2xl bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} text-white shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 text-left`}
+            className={`group relative overflow-hidden p-6 md:p-8 rounded-2xl bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} text-white shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 text-left`}
           >
             {/* 背景装飾 */}
             <div className="absolute inset-0 bg-white opacity-10 transform -skew-y-6 group-hover:skew-y-6 transition-transform duration-300" />
             
             <div className="relative z-10">
-              <div className="mb-4">
+              <div className="mb-3 md:mb-4">
                 {card.icon}
               </div>
-              <h3 className="text-xl font-bold mb-2">{card.title}</h3>
-              <p className="text-sm opacity-90 leading-relaxed">
+              <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2">{card.title}</h3>
+              <p className="text-xs md:text-sm opacity-90 leading-relaxed">
                 {card.description}
               </p>
             </div>

@@ -59,6 +59,7 @@ interface ShiftDataContextType {
   setLeaveRequests: React.Dispatch<React.SetStateAction<LeaveRequest[]>>
   addLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'created_at' | 'updated_at'>) => void
   updateLeaveRequest: (id: string, request: Partial<LeaveRequest>) => void
+  deleteLeaveRequest: (id: string) => Promise<void>
   
   // 制約条件
   constraints: Constraint[]
@@ -324,6 +325,8 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
           shift_symbol: shift.symbol,
           shift_pattern_id: shift.patternId,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'employee_id,date'
         })
 
       if (error) throw error
@@ -498,12 +501,28 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
         .eq('id', id)
 
       if (error) throw error
-      
+
       setLeaveRequests(prev =>
         prev.map(r => (r.id === id ? { ...r, ...request, updated_at: new Date().toISOString() } : r))
       )
     } catch (error) {
       logError('希望休更新', error)
+    }
+  }
+
+  const deleteLeaveRequest = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('leave_requests')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      setLeaveRequests(prev => prev.filter(r => r.id !== id))
+    } catch (error) {
+      logError('希望休削除', error)
+      throw error
     }
   }
 
@@ -634,7 +653,8 @@ export function ShiftDataProvider({ children }: { children: ReactNode }) {
     setLeaveRequests,
     addLeaveRequest,
     updateLeaveRequest,
-    
+    deleteLeaveRequest,
+
     constraints,
     setConstraints,
     addConstraint,

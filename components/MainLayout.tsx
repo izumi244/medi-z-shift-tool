@@ -2,18 +2,20 @@
 
 import React, { useState, ReactNode } from 'react'
 
-import { 
-  Users, 
-  Calendar, 
-  Bot, 
-  ClipboardList, 
+import {
+  Users,
+  Calendar,
+  Bot,
+  ClipboardList,
   BookOpen,
   HelpCircle,
   Download,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Clock
+  Clock,
+  Menu,
+  X
 } from 'lucide-react'
 
 import { useAuth } from '@/contexts/AuthContext'
@@ -93,6 +95,7 @@ const getFilteredMenuItems = (userRole: UserRole): MenuItem[] => {
 
 export default function MainLayout({ children }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState<PageType>('dataInput')
   const [targetMonth, setTargetMonth] = useState<string | undefined>(undefined)
 
@@ -170,6 +173,7 @@ export default function MainLayout({ children }: LayoutProps) {
 
   const handlePageChange = (pageId: PageType) => {
     setCurrentPage(pageId)
+    setIsMobileMenuOpen(false) // モバイルメニューを閉じる
   }
 
   // 現在の日付
@@ -183,11 +187,25 @@ export default function MainLayout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* モバイル用ハンバーガーメニューボタン */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg no-print"
+      >
+        {isMobileMenuOpen ? (
+          <X className="w-6 h-6 text-gray-700" />
+        ) : (
+          <Menu className="w-6 h-6 text-gray-700" />
+        )}
+      </button>
+
       <div className="flex min-h-screen">
-        {/* サイドバー */}
-        <div className={`bg-white shadow-xl transition-all duration-300 ease-in-out flex flex-col ${
-          isCollapsed ? 'w-20' : 'w-80'
-        }`}>
+        {/* サイドバー - PCでは常に表示、モバイルではメニュー開閉 */}
+        <div className={`bg-white shadow-xl transition-all duration-300 ease-in-out flex flex-col no-print
+          ${isCollapsed ? 'w-20' : 'w-80'}
+          md:relative fixed inset-y-0 left-0 z-40
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}>
           
           {/* ユーザー情報エリア */}
           <div className="p-5 border-b-2 border-gray-100">
@@ -296,23 +314,31 @@ export default function MainLayout({ children }: LayoutProps) {
           </div>
         </div>
 
+        {/* モバイルオーバーレイ */}
+        {isMobileMenuOpen && (
+          <div
+            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
         {/* メインコンテンツエリア */}
-        <div className="flex-1 flex flex-col p-5 min-w-0">
+        <div className="flex-1 flex flex-col p-3 md:p-5 min-w-0 pt-16 md:pt-5">
           {/* ヘッダー */}
-          <div className="bg-white rounded-2xl p-6 mb-5 shadow-lg">
+          <div className="bg-white rounded-2xl p-4 md:p-6 mb-5 shadow-lg no-print">
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 🏥 シフト作成ツール
               </h1>
               <div className="text-right text-gray-600">
-                <div className="text-sm mb-1">{currentDate}</div>
+                <div className="text-xs md:text-sm mb-1">{currentDate}</div>
                 <div className="text-xs text-indigo-600 font-medium">{userInfo.role}モード</div>
               </div>
             </div>
           </div>
 
           {/* メインコンテンツ */}
-          <div className="bg-white rounded-2xl p-8 flex-1 shadow-lg overflow-y-auto">
+          <div className="bg-white rounded-2xl p-4 md:p-8 flex-1 shadow-lg overflow-y-auto">
             {children || renderCurrentPage()}
           </div>
         </div>

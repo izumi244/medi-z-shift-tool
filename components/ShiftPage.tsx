@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
 import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
 import { supabase } from '@/lib/supabase'
+import { getWeekKey } from '@/utils/dateUtils'
 import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
 
 interface ShiftAssignment {
@@ -17,23 +18,12 @@ interface ShiftPageProps {
   initialMonth?: string // YYYY-MM format
 }
 
-// 週のキーを取得（月曜日始まり）
-function getWeekKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const day = date.getDate()
-  const dayOfWeek = date.getDay() // 0=日, 1=月, ..., 6=土
-
-  // 月曜日を週の始まりとして計算
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-  const monday = new Date(year, month, day + mondayOffset)
-
-  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
-}
-
 const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   // Contextからデータを取得
   const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
+
+  // 印刷用のref
+  const printRef = useRef<HTMLDivElement>(null)
 
   // 現在の年月の1日を取得
   const getCurrentMonthStart = () => {
@@ -62,6 +52,8 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   const [currentMonthShifts, setCurrentMonthShifts] = useState<any[]>([])
   // 前月16日～今月15日のシフトデータ（勤務時間計算用）
   const [payrollPeriodShifts, setPayrollPeriodShifts] = useState<any[]>([])
+  // 希望休データ
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([])
 
   // システムアカウントを除外した従業員リスト
   const filteredEmployees = useNonSystemEmployees(employees)
@@ -122,6 +114,43 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
       setPayrollPeriodShifts(payrollData || [])
       console.log('労働時間集計期間のシフト:', payrollData?.length, '件')
     }
+
+    // 表示月の希望休データを取得（承認済みのみ）
+    const currentMonthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDayNum = new Date(year, month + 1, 0).getDate()
+    const currentMonthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`
+
+    // まず全データを取得してステータスを確認
+    const { data: allLeaveData, error: allLeaveError } = await supabase
+      .from('leave_requests')
+      .select('*')
+      .gte('date', currentMonthStart)
+      .lte('date', currentMonthEnd)
+
+    console.log('=== 希望休デバッグ ===')
+    console.log('期間:', currentMonthStart, '～', currentMonthEnd)
+    console.log('全希望休データ:', allLeaveData)
+    if (allLeaveData && allLeaveData.length > 0) {
+      console.log('最初のデータのstatus:', allLeaveData[0].status)
+      console.log('statusの型:', typeof allLeaveData[0].status)
+      allLeaveData.forEach((item, index) => {
+        console.log(`データ${index + 1} - status: "${item.status}", leave_type: "${item.leave_type}", date: ${item.date}`)
+      })
+    }
+
+    const { data: leaveData, error: leaveError } = await supabase
+      .from('leave_requests')
+      .select('*')
+      .eq('status', '承認')
+      .gte('date', currentMonthStart)
+      .lte('date', currentMonthEnd)
+
+    if (leaveError) {
+      console.error('希望休取得エラー:', leaveError)
+    } else {
+      setLeaveRequests(leaveData || [])
+      console.log('承認済み希望休データ:', leaveData?.length, '件', leaveData)
+    }
   }
 
   // 今月のシフトデータと労働時間集計期間のシフトデータを取得
@@ -151,12 +180,6 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     if (!editMode) return
 
     const dayInfo = days[day - 1]
-
-    // 水曜日と日曜日はクリニック休診
-    if (dayInfo?.dayOfWeek === '水' || dayInfo?.dayOfWeek === '日') {
-      alert('水曜日と日曜日はクリニック休診日です。')
-      return
-    }
 
     // 既存のシフトを取得
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -263,20 +286,74 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     setCurrentDate(newDate)
   }
 
+  // 日付ごとの希望休ステータスを判定
+  const getLeaveStatus = (employeeId: string, date: string) => {
+    const leave = leaveRequests.find(lr =>
+      lr.employee_id === employeeId &&
+      lr.date === date
+    )
+    return leave ? leave.leave_type : null
+  }
+
+  // 希望休バッジコンポーネント
+  const LeaveBadge = ({ leaveType }: { leaveType: string }) => {
+    const badges: Record<string, { icon: string, text: string, bgColor: string }> = {
+      '希望休': {
+        icon: '🏖️',
+        text: '希望休',
+        bgColor: 'bg-gray-100 text-gray-700'
+      },
+      '出勤可能': {
+        icon: '✅',
+        text: '出勤可',
+        bgColor: 'bg-blue-100 text-blue-700'
+      },
+      '有給': {
+        icon: '🌴',
+        text: '有給',
+        bgColor: 'bg-green-100 text-green-700'
+      }
+    }
+
+    const badge = badges[leaveType] || {
+      icon: '📝',
+      text: leaveType,
+      bgColor: 'bg-gray-100 text-gray-600'
+    }
+
+    return (
+      <span className={`text-[9px] px-1 py-0.5 rounded ${badge.bgColor} font-semibold whitespace-nowrap inline-block leading-tight leave-badge`}>
+        {badge.icon} {badge.text}
+      </span>
+    )
+  }
+
   // セル表示用のコンポーネント
   const renderShiftCell = (employee: Employee, day: number, dayInfo: { isSunday: boolean, isSaturday: boolean, dayOfWeek: string }) => {
     const isClinicClosed = dayInfo.dayOfWeek === '水' || dayInfo.isSunday
 
-    const cellClass = `border-r border-gray-200 h-20 p-1 align-middle text-center ${
+    const cellClass = `border-r border-gray-200 h-20 p-1 align-middle text-center shift-cell ${
       isClinicClosed ? 'bg-gray-100' : 'bg-white'
     } ${editMode && !isClinicClosed ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`
 
     // currentMonthShiftsから該当日のシフトを検索
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    const shift = currentMonthShifts.find(s => s.employee_id === employee.id && s.date === dateStr)
+    const shift = currentMonthShifts?.find(s => s.employee_id === employee.id && s.date === dateStr)
+
+    // 希望休ステータスを取得
+    const leaveStatus = getLeaveStatus(employee.id, dateStr)
 
     if (!shift) {
-      return <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)} />
+      // シフトなし + 希望休バッジのみ表示
+      return (
+        <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)}>
+          {leaveStatus && (
+            <div className="h-full flex items-center justify-center">
+              <LeaveBadge leaveType={leaveStatus} />
+            </div>
+          )}
+        </td>
+      )
     }
 
     // 記号の色分け（パターンに基づく）
@@ -306,15 +383,20 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
 
     return (
       <td key={day} className={cellClass} onClick={() => handleCellClick(employee.id, day, employee.name)}>
-        <div className="h-full flex flex-col items-center justify-center">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${getSymbolColor(shift.shift_symbol as ShiftSymbol, shift.shift_pattern_id)}`}>
+        <div className="h-full flex flex-col items-center justify-center gap-0.5">
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg shift-symbol ${getSymbolColor(shift.shift_symbol as ShiftSymbol, shift.shift_pattern_id)}`}>
             {shift.shift_symbol}
           </div>
-          {timeInfo && (
-            <div className="text-xs text-gray-500 mt-1 w-full text-center px-1">
-              {timeInfo}
-            </div>
-          )}
+          <div className="flex items-center gap-1 flex-wrap justify-center w-full px-1">
+            {timeInfo && (
+              <span className="text-xs text-gray-500 whitespace-nowrap shift-time">
+                {timeInfo}
+              </span>
+            )}
+            {leaveStatus && (
+              <LeaveBadge leaveType={leaveStatus} />
+            )}
+          </div>
         </div>
       </td>
     )
@@ -424,10 +506,15 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
     )
   }
 
+  // PDF出力ハンドラー - ブラウザの印刷機能を呼び出す
+  const handlePrint = () => {
+    window.print()
+  }
+
   return (
     <div className="space-y-6">
       {/* ページヘッダー */}
-      <div className="pb-6">
+      <div className="pb-6 no-print">
         <h2 className="text-3xl font-bold text-indigo-600 mb-2 flex items-center gap-3">
           <ClipboardList className="w-8 h-8" />
           シフト表示
@@ -435,19 +522,20 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
         <p className="text-lg text-gray-600">作成されたシフトの確認・編集</p>
       </div>
 
+      <div ref={printRef}>
       {/* 制御パネル */}
       <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
-            <button onClick={() => changeMonth('prev')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={() => changeMonth('prev')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors no-print">
               <ChevronLeft className="w-5 h-5 text-gray-600" />
             </button>
             <h3 className="text-2xl font-bold text-gray-800">{monthName}</h3>
-            <button onClick={() => changeMonth('next')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={() => changeMonth('next')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors no-print">
               <ChevronRight className="w-5 h-5 text-gray-600" />
             </button>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3 no-print">
             <button
               onClick={() => setEditMode(!editMode)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
@@ -457,15 +545,20 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
               <Edit3 className="w-4 h-4" />
               {editMode ? '編集中' : '編集'}
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg">
-              <Download className="w-4 h-4" />
-              PDF出力
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg">
+                <Download className="w-4 h-4" />
+                PDF出力
+              </button>
+              <div className="text-xs text-gray-500 whitespace-nowrap">
+                💡 Windows:「Microsoft Print to PDF」/ Mac:「PDFとして保存」
+              </div>
+            </div>
           </div>
         </div>
 
         {/* 記号説明 - 動的なパターン表示 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-sm pattern-legend">
           {shiftPatterns.map(pattern => {
             const getPatternBgColor = (symbol: ShiftSymbol) => {
               switch (symbol) {
@@ -523,7 +616,7 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
       {/* シフト表 */}
       <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse table-fixed min-w-[800px]">
+          <table className="w-full border-collapse table-fixed min-w-[800px] print-table">
             <thead>
               <tr className="bg-gray-50">
                 <th className="w-32 border-r border-gray-200 p-3 text-sm font-bold text-gray-700 sticky left-0 bg-gray-50 z-10">
@@ -552,9 +645,9 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
                     {/* 従業員のシフト行 */}
                     <tr className="border-b border-gray-100">
                       <td className="sticky left-0 bg-white border-r border-gray-200 p-3 z-10">
-                        <div className="text-sm font-semibold text-gray-800">{employee.name}</div>
-                        <div className="text-xs text-gray-600">{getEmployeeTypeDisplay(employee)}</div>
-                        <div className={`text-xs font-semibold mt-1 ${
+                        <div className="text-sm font-semibold text-gray-800 employee-name">{employee.name}</div>
+                        <div className="text-xs text-gray-600 stats-text">{getEmployeeTypeDisplay(employee)}</div>
+                        <div className={`text-xs font-semibold mt-1 stats-text ${
                           stats.totalHours > employee.max_hours_per_month
                             ? 'text-red-600'
                             : 'text-blue-700'
@@ -571,7 +664,7 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
                     {/* 週間労働時間表示行 */}
                     <tr className="border-b border-gray-200 bg-gray-50">
                       <td className="sticky left-0 bg-gray-50 border-r border-gray-200 p-2 z-10">
-                        <div className="text-xs text-gray-600">勤務日数・労働時間</div>
+                        <div className="text-xs text-gray-600 stats-text">勤務日数・労働時間</div>
                       </td>
                       {weeks.map((week, weekIndex) => {
                         const weekStats = calculateWeeklyStats(employee.id, week.start, week.end)
@@ -594,7 +687,7 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
                             colSpan={daysInWeek.length}
                             className="p-2 text-center border-r border-gray-200"
                           >
-                            <div className={`text-xs font-semibold inline-block px-2 py-1 rounded ${
+                            <div className={`text-xs font-semibold inline-block px-2 py-1 rounded stats-text ${
                               isWeeklyOverLimit
                                 ? 'bg-red-100 text-red-700'
                                 : 'bg-blue-50 text-blue-700'
@@ -753,6 +846,7 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

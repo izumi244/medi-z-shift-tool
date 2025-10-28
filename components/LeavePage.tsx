@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState } from 'react'
-import { 
-  Calendar, 
-  Plus, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  ChevronLeft, 
+import {
+  Calendar,
+  Plus,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  ChevronLeft,
   ChevronRight,
   Edit,
   Trash2,
@@ -15,12 +15,14 @@ import {
   X
 } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { getCurrentYearMonth } from '@/utils/dateFormat'
 import type { LeaveRequest, RequestStatus } from '@/types'
 
 const LeavePage: React.FC = () => {
   // Contextからデータ取得（ローカル状態管理から変更）
-  const { employees, leaveRequests, addLeaveRequest, updateLeaveRequest } = useShiftData()
+  const { employees, leaveRequests, addLeaveRequest, updateLeaveRequest, deleteLeaveRequest } = useShiftData()
+  const { user } = useAuth()
 
   const [currentMonth, setCurrentMonth] = useState(getCurrentYearMonth())
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
@@ -29,6 +31,19 @@ const LeavePage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<RequestStatus | ''>('')
   const [filterEmployee, setFilterEmployee] = useState('')
   const [requestType, setRequestType] = useState<'leave' | 'work'>('leave')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [leaveToDelete, setLeaveToDelete] = useState<LeaveRequest | null>(null)
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false)
+  const [leaveToReject, setLeaveToReject] = useState<LeaveRequest | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  // ログインユーザーの情報を取得
+  const currentUserRole = user?.role || 'employee'
+  const currentUserId = user?.id || ''
+
+  // ログインユーザーに対応する従業員IDを取得
+  const currentEmployee = employees.find(emp => emp.user_id === currentUserId)
+  const currentEmployeeId = currentEmployee?.id || ''
 
   // フォームデータ
   const [formData, setFormData] = useState({
@@ -40,7 +55,12 @@ const LeavePage: React.FC = () => {
 
   // 従業員名を取得
   const getEmployeeName = (employeeId: string) => {
-    return employees.find(emp => emp.id === employeeId)?.name || '不明'
+    const employee = employees.find(emp => emp.id === employeeId)
+    if (!employee) {
+      console.warn(`従業員が見つかりません: ${employeeId}`)
+      return '不明'
+    }
+    return employee.name
   }
 
   // 月を変更
@@ -67,21 +87,86 @@ const LeavePage: React.FC = () => {
 
   // 希望休申請を承認（updateLeaveRequest関数を使用）
   const approveLeave = (id: string) => {
+    // 承認は管理者と開発者のみ可能
+    if (currentUserRole !== 'admin' && currentUserRole !== 'developer') {
+      alert('承認する権限がありません')
+      return
+    }
+
     updateLeaveRequest(id, {
       status: '承認',
-      approved_by: 'admin',
+      approved_by: user?.employee_number || user?.name || 'unknown',
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
   }
 
+  // 却下確認ダイアログを開く
+  const openRejectConfirm = (leave: LeaveRequest) => {
+    // 却下は管理者と開発者のみ可能
+    if (currentUserRole !== 'admin' && currentUserRole !== 'developer') {
+      alert('却下する権限がありません')
+      return
+    }
+    setLeaveToReject(leave)
+    setRejectReason('')
+    setRejectConfirmOpen(true)
+  }
+
   // 希望休申請を却下（updateLeaveRequest関数を使用）
-  const rejectLeave = (id: string, reason: string) => {
-    updateLeaveRequest(id, {
+  const rejectLeave = () => {
+    if (!leaveToReject || !rejectReason.trim()) {
+      alert('却下理由を入力してください')
+      return
+    }
+
+    updateLeaveRequest(leaveToReject.id, {
       status: '却下',
-      rejection_reason: reason,
+      rejection_reason: rejectReason,
       updated_at: new Date().toISOString()
     })
+
+    setRejectConfirmOpen(false)
+    setLeaveToReject(null)
+    setRejectReason('')
+  }
+
+  // 削除権限チェック
+  const canDelete = (leave: LeaveRequest): boolean => {
+    // 開発者・管理者は全て削除可能
+    if (currentUserRole === 'developer' || currentUserRole === 'admin') {
+      return true
+    }
+
+    // 一般従業員は申請中の自分の申請のみ削除可能
+    if (currentUserRole === 'employee') {
+      return leave.status === '申請中' && leave.employee_id === currentEmployeeId
+    }
+
+    return false
+  }
+
+  // 削除確認ダイアログを開く
+  const openDeleteConfirm = (leave: LeaveRequest) => {
+    setLeaveToDelete(leave)
+    setDeleteConfirmOpen(true)
+  }
+
+  // 削除実行
+  const handleDelete = async () => {
+    if (!leaveToDelete) return
+
+    try {
+      await deleteLeaveRequest(leaveToDelete.id)
+      setDeleteConfirmOpen(false)
+      setLeaveToDelete(null)
+      if (selectedLeave?.id === leaveToDelete.id) {
+        setSelectedLeave(null)
+      }
+    } catch (error) {
+      console.error('削除エラー:', error)
+      alert('削除に失敗しました')
+    }
   }
 
   const openModal = () => {
@@ -96,17 +181,24 @@ const LeavePage: React.FC = () => {
   }
 
   // 新規申請を追加（addLeaveRequest関数を使用）
-  const addRequest = () => {
-    const finalLeaveType = requestType === 'work' ? '出勤可能' : formData.leave_type
+  const addRequest = async () => {
+    try {
+      const finalLeaveType = requestType === 'work' ? '出勤可能' : formData.leave_type
 
-    addLeaveRequest({
-      employee_id: formData.employee_id,
-      date: formData.date,
-      leave_type: finalLeaveType,
-      reason: formData.reason,
-      status: '申請中'
-    })
-    setIsModalOpen(false)
+      await addLeaveRequest({
+        employee_id: formData.employee_id,
+        date: formData.date,
+        leave_type: finalLeaveType,
+        reason: formData.reason,
+        status: '申請中'
+      })
+
+      setIsModalOpen(false)
+      alert('申請しました')
+    } catch (error) {
+      console.error('申請エラー:', error)
+      alert('申請に失敗しました。もう一度お試しください。')
+    }
   }
 
   // フィルタリングされた希望休
@@ -462,13 +554,22 @@ const LeavePage: React.FC = () => {
                                 <CheckCircle2 className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => rejectLeave(leave.id, '管理者による却下')}
+                                onClick={() => openRejectConfirm(leave)}
                                 className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
                                 title="却下"
                               >
                                 <XCircle className="w-4 h-4" />
                               </button>
                             </>
+                          )}
+                          {canDelete(leave) && (
+                            <button
+                              onClick={() => openDeleteConfirm(leave)}
+                              className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                              title="削除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -661,7 +762,7 @@ const LeavePage: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      rejectLeave(selectedLeave.id, '管理者による却下')
+                      openRejectConfirm(selectedLeave)
                       setSelectedLeave(null)
                     }}
                     className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
@@ -670,6 +771,147 @@ const LeavePage: React.FC = () => {
                   </button>
                 </div>
               )}
+
+              {canDelete(selectedLeave) && (
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => openDeleteConfirm(selectedLeave)}
+                    className="w-full py-2 px-4 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    削除
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 削除確認ダイアログ */}
+      {deleteConfirmOpen && leaveToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-red-600">削除確認</h3>
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <p className="text-gray-900">以下の申請を削除してもよろしいですか？</p>
+
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">スタッフ:</span>
+                  <span className="font-medium">{getEmployeeName(leaveToDelete.employee_id)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">日付:</span>
+                  <span className="font-medium">{new Date(leaveToDelete.date).toLocaleDateString('ja-JP')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">種類:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${leaveTypeColors[leaveToDelete.leave_type]}`}>
+                    {leaveToDelete.leave_type}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">ステータス:</span>
+                  <span className={`text-sm font-medium ${getStatusStyles(leaveToDelete.status).text}`}>
+                    {leaveToDelete.status}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-sm text-red-600 font-semibold">この操作は取り消せません。</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors"
+              >
+                削除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 却下理由入力ダイアログ */}
+      {rejectConfirmOpen && leaveToReject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-red-600">却下理由の入力</h3>
+              <button
+                onClick={() => setRejectConfirmOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <p className="text-gray-900">以下の申請を却下します：</p>
+
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">スタッフ:</span>
+                  <span className="font-medium">{getEmployeeName(leaveToReject.employee_id)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">日付:</span>
+                  <span className="font-medium">{new Date(leaveToReject.date).toLocaleDateString('ja-JP')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">種類:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${leaveTypeColors[leaveToReject.leave_type]}`}>
+                    {leaveToReject.leave_type}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="reject-reason" className="block text-sm font-semibold text-gray-700 mb-2">
+                  却下理由 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  id="reject-reason"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-colors resize-none text-gray-800"
+                  placeholder="例：その日は既に人員が足りています"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRejectConfirmOpen(false)}
+                className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={rejectLeave}
+                disabled={!rejectReason.trim()}
+                className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-xl font-semibold transition-colors"
+              >
+                却下
+              </button>
             </div>
           </div>
         </div>

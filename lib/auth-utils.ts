@@ -61,10 +61,20 @@ export async function generateUniquePassword(): Promise<string> {
 // ==================== セッション管理 ====================
 
 /**
- * ランダムなセッショントークンを生成
+ * ランダムなセッショントークンを生成（暗号学的に安全）
  */
 export function generateSessionToken(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36)
+  // 暗号学的に安全な乱数生成を使用
+  if (typeof window !== 'undefined' && window.crypto) {
+    // ブラウザ環境
+    const array = new Uint8Array(32)
+    window.crypto.getRandomValues(array)
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+  } else {
+    // Node.js環境
+    const crypto = require('crypto')
+    return crypto.randomBytes(32).toString('hex')
+  }
 }
 
 /**
@@ -79,13 +89,17 @@ export async function verifySession(sessionToken: string) {
       .single()
 
     if (error || !data || !data.session_token) return null
-    
+
+    // 開発者の従業員番号（環境変数から取得、デフォルトはemp001）
+    const developers = process.env.DEVELOPER_EMPLOYEE_NUMBERS?.split(',') || ['emp001']
+    const isDeveloper = data.is_system_account && developers.includes(data.employee_number || '')
+
     return {
       id: data.id,
       employee_number: data.employee_number || '',
       name: data.name,
-      role: data.is_system_account ? 
-        (data.employee_number === 'emp001' ? 'developer' : 'admin') : 
+      role: data.is_system_account ?
+        (isDeveloper ? 'developer' : 'admin') :
         'employee',
       password_changed: data.password_changed || false
     }
@@ -143,13 +157,17 @@ export async function login(employeeNumber: string, password: string) {
 
     if (updateError) throw updateError
 
+    // 開発者の従業員番号（環境変数から取得、デフォルトはemp001）
+    const developers = process.env.DEVELOPER_EMPLOYEE_NUMBERS?.split(',') || ['emp001']
+    const isDeveloper = data.is_system_account && developers.includes(data.employee_number || '')
+
     // ユーザー情報を返す
     return {
       id: data.id,
       employee_number: data.employee_number || '',
       name: data.name,
-      role: data.is_system_account ? 
-        (data.employee_number === 'emp001' ? 'developer' : 'admin') : 
+      role: data.is_system_account ?
+        (isDeveloper ? 'developer' : 'admin') :
         'employee',
       password_changed: data.password_changed || false,
       session_token: sessionToken

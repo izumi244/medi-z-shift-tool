@@ -47,3 +47,51 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+/* 印刷用スタイル */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* 印刷しない要素 */
+  .no-print {
+    display: none !important;
+  }
+
+  /* ページ全体を縮小してフィット */
+  html {
+    zoom: 0.6;
+  }
+
+  /* 横スクロール防止 */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* 余白を最小化 */
+  .space-y-6 {
+    gap: 0 !important;
+  }
+
+  .space-y-6 > * {
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* 改ページを防止 */
+  table, tr, td, th {
+    page-break-inside: avoid !important;
+  }
+}

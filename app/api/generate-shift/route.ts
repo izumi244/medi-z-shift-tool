@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createIdMap } from '@/utils/employeeUtils'
+import { getWeekKey } from '@/utils/dateUtils'
+import { verifySession } from '@/lib/auth-utils'
 import type { Employee } from '@/types'
-
-// 週のキーを取得（月曜日始まり）
-function getWeekKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const day = date.getDate()
-  const dayOfWeek = date.getDay() // 0=日, 1=月, ..., 6=土
-
-  // 月曜日を週の始まりとして計算
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-  const monday = new Date(year, month, day + mondayOffset)
-
-  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
-}
 
 // カレンダー生成関数（休診日を除外した営業日のみ）
 function generateBusinessCalendar(targetMonth: string, closedDays: number[]) {
@@ -70,6 +58,33 @@ interface GenerateShiftRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    // 認証チェック
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      )
+    }
+
+    const sessionToken = authHeader.substring(7) // "Bearer " を除去
+    const userData = await verifySession(sessionToken)
+
+    if (!userData) {
+      return NextResponse.json(
+        { error: 'セッションが無効です' },
+        { status: 401 }
+      )
+    }
+
+    // 管理者または開発者のみシフト生成可能
+    if (userData.role !== 'admin' && userData.role !== 'developer') {
+      return NextResponse.json(
+        { error: 'シフト生成の権限がありません' },
+        { status: 403 }
+      )
+    }
+
     const body: GenerateShiftRequest = await request.json()
 
     // Dify APIキーとURLを環境変数から取得
@@ -120,6 +135,25 @@ export async function POST(request: NextRequest) {
 
     console.log('Calendar simple format:', calendarSimple)
 
+    // Difyへ送信するデータ
+    const difyInputs = {
+      target_month: body.target_month,
+      calendar: calendarSimple,
+      employees: JSON.stringify(body.employees, null, 2),
+      leave_requests: JSON.stringify(body.leave_requests, null, 2),
+      shift_patterns: JSON.stringify(body.shift_patterns, null, 2),
+      constraints: body.constraints,
+    }
+
+    console.log('=== Dify Inputs Debug ===')
+    console.log('target_month:', difyInputs.target_month)
+    console.log('employees count:', body.employees.length)
+    console.log('employees:', difyInputs.employees)
+    console.log('leave_requests:', difyInputs.leave_requests)
+    console.log('shift_patterns count:', body.shift_patterns.length)
+    console.log('constraints:', difyInputs.constraints)
+    console.log('========================')
+
     // Dify Workflow APIを呼び出し（ストリーミングモード）
     const response = await fetch(`${difyApiUrl}/workflows/run`, {
       method: 'POST',
@@ -128,14 +162,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        inputs: {
-          target_month: body.target_month,
-          calendar: calendarSimple,
-          employees: JSON.stringify(body.employees, null, 2),
-          leave_requests: JSON.stringify(body.leave_requests, null, 2),
-          shift_patterns: JSON.stringify(body.shift_patterns, null, 2),
-          constraints: body.constraints,
-        },
+        inputs: difyInputs,
         response_mode: 'streaming',
         user: 'shift-admin',
       }),
