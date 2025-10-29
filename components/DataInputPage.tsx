@@ -3,6 +3,7 @@
 import { useState, ReactNode } from 'react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
 import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
+import { useAuth } from '@/contexts/AuthContext'
 import { getCurrentYearMonth } from '@/utils/dateFormat'
 import { authenticatedPost } from '@/lib/api-client'
 
@@ -13,7 +14,8 @@ import {
   ClipboardList,
   Rocket,
   Play,
-  Clock
+  Clock,
+  Lock
 } from 'lucide-react'
 
 interface ManagementCard {
@@ -31,6 +33,7 @@ interface DataInputPageProps {
 
 export default function DataInputPage({ onNavigate }: DataInputPageProps) {
   const { employees, leaveRequests, shiftPatterns, constraints, saveGeneratedShifts } = useShiftData()
+  const { user } = useAuth()
 
   // システムアカウントを除外
   const actualEmployees = useNonSystemEmployees(employees)
@@ -38,6 +41,9 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
   const [targetMonth, setTargetMonth] = useState(getCurrentYearMonth())
   const [specialRequests, setSpecialRequests] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+
+  // 管理者または開発者かどうかを判定
+  const isAdminOrDeveloper = user?.role === 'admin' || user?.role === 'developer'
 
   // 管理機能カード（新要件に対応して削減）
   const managementCards: ManagementCard[] = [
@@ -234,9 +240,9 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
         <div className="text-center">
           <button
             onClick={handleGenerateShift}
-            disabled={isGenerating}
+            disabled={isGenerating || !isAdminOrDeveloper}
             className={`inline-flex items-center gap-2 md:gap-3 px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition-all duration-300 ${
-              isGenerating
+              isGenerating || !isAdminOrDeveloper
                 ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                 : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
             }`}
@@ -245,6 +251,11 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
               <>
                 <div className="animate-spin rounded-full h-5 w-5 md:h-6 md:w-6 border-b-2 border-white" />
                 作成中...
+              </>
+            ) : !isAdminOrDeveloper ? (
+              <>
+                <Lock className="w-5 h-5 md:w-6 md:h-6" />
+                管理者・開発者のみ実行可能
               </>
             ) : (
               <>
@@ -261,12 +272,26 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
         {managementCards.map((card) => (
           <button
             key={card.id}
-            onClick={() => handleCardClick(card.id)}
-            className={`group relative overflow-hidden p-6 md:p-8 rounded-2xl bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} text-white shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 text-left`}
+            onClick={() => isAdminOrDeveloper && handleCardClick(card.id)}
+            disabled={!isAdminOrDeveloper}
+            className={`group relative overflow-hidden p-6 md:p-8 rounded-2xl bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} text-white shadow-xl transition-all duration-300 text-left ${
+              isAdminOrDeveloper
+                ? 'hover:shadow-2xl transform hover:scale-105 cursor-pointer'
+                : 'opacity-60 cursor-not-allowed'
+            }`}
           >
             {/* 背景装飾 */}
-            <div className="absolute inset-0 bg-white opacity-10 transform -skew-y-6 group-hover:skew-y-6 transition-transform duration-300" />
-            
+            <div className={`absolute inset-0 bg-white opacity-10 transform -skew-y-6 transition-transform duration-300 ${
+              isAdminOrDeveloper ? 'group-hover:skew-y-6' : ''
+            }`} />
+
+            {/* ロックアイコン（従業員の場合） */}
+            {!isAdminOrDeveloper && (
+              <div className="absolute top-4 right-4 z-20">
+                <Lock className="w-6 h-6" />
+              </div>
+            )}
+
             <div className="relative z-10">
               <div className="mb-3 md:mb-4">
                 {card.icon}
@@ -275,6 +300,11 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
               <p className="text-xs md:text-sm opacity-90 leading-relaxed">
                 {card.description}
               </p>
+              {!isAdminOrDeveloper && (
+                <p className="text-xs mt-2 opacity-80 font-semibold">
+                  🔒 管理者・開発者のみアクセス可能
+                </p>
+              )}
             </div>
           </button>
         ))}

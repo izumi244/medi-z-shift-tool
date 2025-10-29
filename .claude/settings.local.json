@@ -32,7 +32,12 @@
       "Bash(powershell -Command \"(Get-Content schema.sql -Raw) -replace ''CREATE INDEX idx_constraints_priority ON ai_constraint_guidelines\\(priority_level DESC\\);\\s+CREATE INDEX idx_constraints_category ON ai_constraint_guidelines\\(category\\);'', '''' | Set-Content schema.sql\")",
       "Bash(git init:*)",
       "Bash(git remote add:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(for file in app/api/*/route.ts)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(head:*)",
+      "Bash(done)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []
