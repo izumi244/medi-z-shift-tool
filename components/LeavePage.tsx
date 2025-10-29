@@ -9,9 +9,7 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
-  Edit,
   Trash2,
-  Eye,
   X
 } from 'lucide-react'
 import { useShiftData } from '@/contexts/ShiftDataContext'
@@ -25,11 +23,8 @@ const LeavePage: React.FC = () => {
   const { user } = useAuth()
 
   const [currentMonth, setCurrentMonth] = useState(getCurrentYearMonth())
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null)
-  const [filterStatus, setFilterStatus] = useState<RequestStatus | ''>('')
-  const [filterEmployee, setFilterEmployee] = useState('')
   const [requestType, setRequestType] = useState<'leave' | 'work'>('leave')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [leaveToDelete, setLeaveToDelete] = useState<LeaveRequest | null>(null)
@@ -42,8 +37,28 @@ const LeavePage: React.FC = () => {
   const currentUserId = user?.id || ''
 
   // ログインユーザーに対応する従業員IDを取得
-  const currentEmployee = employees.find(emp => emp.user_id === currentUserId)
+  const currentEmployee = employees.find(emp => emp.employee_number === user?.employee_number)
   const currentEmployeeId = currentEmployee?.id || ''
+
+  // プルダウンに表示する従業員リスト
+  const selectableEmployees = (() => {
+    // 開発者・管理者の場合：システムアカウント以外の全従業員を表示
+    if (currentUserRole === 'admin' || currentUserRole === 'developer') {
+      return employees.filter((emp) => !emp.is_system_account)
+    }
+
+    // 従業員の場合：自分自身のみ表示
+    if (currentUserRole === 'employee' && currentEmployeeId) {
+      return employees.filter((emp) => emp.id === currentEmployeeId)
+    }
+
+    // その他の場合：空配列
+    return []
+  })()
+
+  // デバッグ用ログ
+  console.log('ログインユーザー:', { role: currentUserRole, employeeId: currentEmployeeId })
+  console.log('選択可能な従業員:', selectableEmployees.map(e => ({ name: e.name, id: e.id })))
 
   // フォームデータ
   const [formData, setFormData] = useState({
@@ -201,12 +216,9 @@ const LeavePage: React.FC = () => {
     }
   }
 
-  // フィルタリングされた希望休
+  // フィルタリングされた希望休（現在の月のみ）
   const filteredLeaves = leaveRequests.filter(leave => {
-    const matchesStatus = !filterStatus || leave.status === filterStatus
-    const matchesEmployee = !filterEmployee || getEmployeeName(leave.employee_id).includes(filterEmployee)
-    const matchesMonth = leave.date.startsWith(currentMonth)
-    return matchesStatus && matchesEmployee && matchesMonth
+    return leave.date.startsWith(currentMonth)
   })
 
   // カレンダーのレンダリング用データ
@@ -357,230 +369,80 @@ const LeavePage: React.FC = () => {
 
       {/* 操作バー */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-        {/* 表示切り替え・月選択 */}
-        <div className="flex items-center gap-4">
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('calendar')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                viewMode === 'calendar'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              カレンダー
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              リスト
-            </button>
-          </div>
-
-          {/* 月選択 */}
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-gray-200">
-            <button
-              onClick={() => changeMonth('prev')}
-              className="p-1 rounded hover:bg-gray-100 transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <span className="font-semibold text-gray-800 min-w-[100px] text-center">
-              {currentMonth.replace('-', '年')}月
-            </span>
-            <button
-              onClick={() => changeMonth('next')}
-              className="p-1 rounded hover:bg-gray-100 transition-colors"
-            >
-              <ChevronRight className="w-5 h-5 text-gray-600" />
-            </button>
-          </div>
-        </div>
-
-        {/* フィルタ・追加ボタン */}
-        <div className="flex items-center gap-4">
-          {viewMode === 'list' && (
-            <>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as RequestStatus | '')}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors text-gray-800"
-              >
-                <option value="">ステータス（全て）</option>
-                <option value="申請中">申請中</option>
-                <option value="承認">承認</option>
-                <option value="却下">却下</option>
-              </select>
-
-              <input
-                type="text"
-                placeholder="スタッフ名で検索"
-                value={filterEmployee}
-                onChange={(e) => setFilterEmployee(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors text-gray-800"
-              />
-            </>
-          )}
-
+        {/* 月選択 */}
+        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-gray-200">
           <button
-            onClick={openModal}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+            onClick={() => changeMonth('prev')}
+            className="p-1 rounded hover:bg-gray-100 transition-colors"
           >
-            <Plus className="w-5 h-5" />
-            新規申請
+            <ChevronLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <span className="font-semibold text-gray-800 min-w-[100px] text-center">
+            {currentMonth.replace('-', '年')}月
+          </span>
+          <button
+            onClick={() => changeMonth('next')}
+            className="p-1 rounded hover:bg-gray-100 transition-colors"
+          >
+            <ChevronRight className="w-5 h-5 text-gray-600" />
           </button>
         </div>
+
+        {/* 追加ボタン */}
+        <button
+          onClick={openModal}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+        >
+          <Plus className="w-5 h-5" />
+          新規申請
+        </button>
       </div>
 
-      {/* メインコンテンツ */}
-      {viewMode === 'calendar' ? (
-        /* カレンダー表示 */
-        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-lg">
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
-              <div key={day} className="p-3 text-center font-semibold text-gray-700 border-b border-gray-200">
-                {day}
-              </div>
-            ))}
-          </div>
-          
-          <div className="grid grid-cols-7 gap-2">
-            {generateCalendarDays().map((dayData, index) => (
-              <div key={index} className="min-h-[100px] p-2 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
-                {dayData && (
-                  <>
-                    <div className="font-semibold text-gray-800 mb-2">{dayData.day}</div>
-                    <div className="space-y-1">
-                      {dayData.leaves.map((leave) => {
-                        const styles = getStatusStyles(leave.status)
-                        return (
-                          <button
-                            key={leave.id}
-                            className={`text-xs p-2 rounded cursor-pointer ${styles.bg} ${styles.border} border w-full text-left`}
-                            onClick={() => setSelectedLeave(leave)}
-                            title={`${getEmployeeName(leave.employee_id)} - ${leave.leave_type}`}
-                          >
-                            <div className="flex items-center gap-1">
-                              {getStatusIcon(leave.status)}
-                              <span className={`font-medium truncate ${styles.text}`}>
-                                {getEmployeeName(leave.employee_id)}
-                              </span>
-                            </div>
-                            <div className={`text-xs opacity-75 truncate ${styles.text}`}>
-                              {leave.leave_type}
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+      {/* カレンダー表示 */}
+      <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-lg">
+        <div className="grid grid-cols-7 gap-2 mb-4">
+          {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
+            <div key={day} className="p-3 text-center font-semibold text-gray-700 border-b border-gray-200">
+              {day}
+            </div>
+          ))}
         </div>
-      ) : (
-        /* リスト表示 */
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-lg">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">申請日</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">スタッフ</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">希望日</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">種類</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">理由</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">ステータス</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredLeaves.map((leave) => {
-                  const styles = getStatusStyles(leave.status)
-                  return (
-                    <tr key={leave.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {new Date(leave.created_at).toLocaleDateString('ja-JP')}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                            {getEmployeeName(leave.employee_id).charAt(0)}
+
+        <div className="grid grid-cols-7 gap-2">
+          {generateCalendarDays().map((dayData, index) => (
+            <div key={index} className="min-h-[100px] p-2 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+              {dayData && (
+                <>
+                  <div className="font-semibold text-gray-800 mb-2">{dayData.day}</div>
+                  <div className="space-y-1">
+                    {dayData.leaves.map((leave) => {
+                      const styles = getStatusStyles(leave.status)
+                      return (
+                        <button
+                          key={leave.id}
+                          className={`text-xs p-2 rounded cursor-pointer ${styles.bg} ${styles.border} border w-full text-left`}
+                          onClick={() => setSelectedLeave(leave)}
+                          title={`${getEmployeeName(leave.employee_id)} - ${leave.leave_type}`}
+                        >
+                          <div className="flex items-center gap-1">
+                            {getStatusIcon(leave.status)}
+                            <span className={`font-medium truncate ${styles.text}`}>
+                              {getEmployeeName(leave.employee_id)}
+                            </span>
                           </div>
-                          <span className="font-medium text-gray-900">{getEmployeeName(leave.employee_id)}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                        {new Date(leave.date).toLocaleDateString('ja-JP')}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${leaveTypeColors[leave.leave_type]}`}>
-                          {leave.leave_type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate">
-                        {leave.reason}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${styles.bg} ${styles.border} border w-fit`}>
-                          {getStatusIcon(leave.status)}
-                          <span className={`text-sm font-medium ${styles.text}`}>
-                            {leave.status}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setSelectedLeave(leave)}
-                            className="p-1 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
-                            title="詳細"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {leave.status === '申請中' && (
-                            <>
-                              <button
-                                onClick={() => approveLeave(leave.id)}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
-                                title="承認"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openRejectConfirm(leave)}
-                                className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                                title="却下"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                          {canDelete(leave) && (
-                            <button
-                              onClick={() => openDeleteConfirm(leave)}
-                              className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                              title="削除"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <div className={`text-xs opacity-75 truncate ${styles.text}`}>
+                            {leave.leave_type}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* 新規申請モーダル */}
       {isModalOpen && (
@@ -616,7 +478,7 @@ const LeavePage: React.FC = () => {
                   className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors text-gray-800"
                 >
                   <option value="">選択してください</option>
-                  {employees.map((emp) => (
+                  {selectableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id} className="text-gray-800">
                       {emp.name}
                     </option>
@@ -749,7 +611,7 @@ const LeavePage: React.FC = () => {
                 </p>
               </div>
 
-              {selectedLeave.status === '申請中' && (
+              {selectedLeave.status === '申請中' && (currentUserRole === 'admin' || currentUserRole === 'developer') && (
                 <div className="flex gap-3 pt-4 border-t border-gray-200">
                   <button
                     onClick={() => {

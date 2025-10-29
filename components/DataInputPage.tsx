@@ -25,6 +25,7 @@ interface ManagementCard {
   description: string
   gradientFrom: string
   gradientTo: string
+  adminOnly?: boolean
 }
 
 interface DataInputPageProps {
@@ -53,7 +54,8 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       title: '従業員管理',
       description: '従業員情報、勤務制約、対応パターンを設定',
       gradientFrom: 'from-blue-500',
-      gradientTo: 'to-blue-600'
+      gradientTo: 'to-blue-600',
+      adminOnly: true
     },
     {
       id: 'shift-pattern',
@@ -61,7 +63,8 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       title: 'シフトパターン管理',
       description: '勤務パターンの設定',
       gradientFrom: 'from-green-500',
-      gradientTo: 'to-green-600'
+      gradientTo: 'to-green-600',
+      adminOnly: true
     },
     {
       id: 'leave',
@@ -69,7 +72,8 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       title: '希望休管理',
       description: 'スタッフの希望休申請・承認・編集機能',
       gradientFrom: 'from-purple-500',
-      gradientTo: 'to-purple-600'
+      gradientTo: 'to-purple-600',
+      adminOnly: false
     },
     {
       id: 'constraints',
@@ -77,7 +81,8 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       title: 'AI制約条件管理',
       description: '自然言語での制約方針設定',
       gradientFrom: 'from-orange-500',
-      gradientTo: 'to-orange-600'
+      gradientTo: 'to-orange-600',
+      adminOnly: true
     },
     {
       id: 'shift',
@@ -85,7 +90,8 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
       title: 'シフト表示',
       description: '作成されたシフトの確認・編集',
       gradientFrom: 'from-indigo-500',
-      gradientTo: 'to-indigo-600'
+      gradientTo: 'to-indigo-600',
+      adminOnly: false
     }
   ]
 
@@ -269,45 +275,49 @@ export default function DataInputPage({ onNavigate }: DataInputPageProps) {
 
       {/* 管理機能カード */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-        {managementCards.map((card) => (
-          <button
-            key={card.id}
-            onClick={() => isAdminOrDeveloper && handleCardClick(card.id)}
-            disabled={!isAdminOrDeveloper}
-            className={`group relative overflow-hidden p-6 md:p-8 rounded-2xl bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} text-white shadow-xl transition-all duration-300 text-left ${
-              isAdminOrDeveloper
-                ? 'hover:shadow-2xl transform hover:scale-105 cursor-pointer'
-                : 'opacity-60 cursor-not-allowed'
-            }`}
-          >
-            {/* 背景装飾 */}
-            <div className={`absolute inset-0 bg-white opacity-10 transform -skew-y-6 transition-transform duration-300 ${
-              isAdminOrDeveloper ? 'group-hover:skew-y-6' : ''
-            }`} />
+        {managementCards.map((card) => {
+          const isRestricted = card.adminOnly && !isAdminOrDeveloper
 
-            {/* ロックアイコン（従業員の場合） */}
-            {!isAdminOrDeveloper && (
-              <div className="absolute top-4 right-4 z-20">
-                <Lock className="w-6 h-6" />
-              </div>
-            )}
+          return (
+            <button
+              key={card.id}
+              onClick={() => !isRestricted && handleCardClick(card.id)}
+              disabled={isRestricted}
+              className={`group relative overflow-hidden p-6 md:p-8 rounded-2xl bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} text-white shadow-xl transition-all duration-300 text-left ${
+                isRestricted
+                  ? 'opacity-60 cursor-not-allowed'
+                  : 'hover:shadow-2xl transform hover:scale-105 cursor-pointer'
+              }`}
+            >
+              {/* 背景装飾 */}
+              <div className={`absolute inset-0 bg-white opacity-10 transform -skew-y-6 transition-transform duration-300 ${
+                !isRestricted ? 'group-hover:skew-y-6' : ''
+              }`} />
 
-            <div className="relative z-10">
-              <div className="mb-3 md:mb-4">
-                {card.icon}
-              </div>
-              <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2">{card.title}</h3>
-              <p className="text-xs md:text-sm opacity-90 leading-relaxed">
-                {card.description}
-              </p>
-              {!isAdminOrDeveloper && (
-                <p className="text-xs mt-2 opacity-80 font-semibold">
-                  🔒 管理者・開発者のみアクセス可能
-                </p>
+              {/* ロックアイコン（制限されているカードの場合） */}
+              {isRestricted && (
+                <div className="absolute top-4 right-4 z-20">
+                  <Lock className="w-6 h-6" />
+                </div>
               )}
-            </div>
-          </button>
-        ))}
+
+              <div className="relative z-10">
+                <div className="mb-3 md:mb-4">
+                  {card.icon}
+                </div>
+                <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2">{card.title}</h3>
+                <p className="text-xs md:text-sm opacity-90 leading-relaxed">
+                  {card.description}
+                </p>
+                {isRestricted && (
+                  <p className="text-xs mt-2 opacity-80 font-semibold">
+                    🔒 管理者・開発者のみアクセス可能
+                  </p>
+                )}
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

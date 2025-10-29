@@ -7,9 +7,6 @@ import {
   Calendar,
   Bot,
   ClipboardList,
-  BookOpen,
-  HelpCircle,
-  Download,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -160,12 +157,6 @@ export default function MainLayout({ children }: LayoutProps) {
     }
   }
 
-  // システムメニューにログアウトを追加
-  const systemItems = [
-    { icon: <BookOpen className="w-4 h-4" />, title: '操作マニュアル' },
-    { icon: <HelpCircle className="w-4 h-4" />, title: 'ヘルプ・サポート' },
-    { icon: <Download className="w-4 h-4" />, title: 'データエクスポート' },
-  ]
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed)
@@ -276,40 +267,14 @@ export default function MainLayout({ children }: LayoutProps) {
               </ul>
             </div>
 
-            {/* システムメニュー */}
+            {/* ログアウト */}
             <div className="border-t border-gray-200 pt-6">
-              {!isCollapsed && (
-                <div className="px-3 mb-4">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    システム
-                  </h3>
-                </div>
-              )}
-              
-              <ul className="space-y-1">
-                {systemItems.map((item, index) => (
-                  <li key={index}>
-                    <button className="w-full flex items-center gap-3 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors duration-200 text-left">
-                      <span className="flex-shrink-0">
-                        {item.icon}
-                      </span>
-                      {!isCollapsed && (
-                        <span className="text-sm">{item.title}</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-                
-                {/* ログアウト */}
-                <li className="border-t border-gray-200 pt-3 mt-3">
-                  <button onClick={handleLogout} className="w-full flex items-center gap-3 p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors duration-200 text-left">
-                    <LogOut className="w-4 h-4 flex-shrink-0" />
-                    {!isCollapsed && (
-                      <span className="text-sm">ログアウト</span>
-                    )}
-                  </button>
-                </li>
-              </ul>
+              <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors duration-200 text-left">
+                <LogOut className="w-4 h-4 flex-shrink-0" />
+                {!isCollapsed && (
+                  <span className="text-sm font-semibold">ログアウト</span>
+                )}
+              </button>
             </div>
           </div>
         </div>

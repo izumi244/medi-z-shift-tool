@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Edit3, Download, ClipboardList, X, Save } from 'lucide-react'
 
 import { useShiftData } from '@/contexts/ShiftDataContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useNonSystemEmployees } from '@/hooks/useNonSystemEmployees'
 import { supabase } from '@/lib/supabase'
 import type { ShiftSymbol, Employee, ShiftPattern } from '@/types'
@@ -22,9 +23,13 @@ interface ShiftPageProps {
 const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
   // Contextからデータを取得
   const { employees, shiftPatterns, shiftData, updateShift } = useShiftData()
+  const { user } = useAuth()
 
   // 印刷用のref
   const printRef = useRef<HTMLDivElement>(null)
+
+  // ロールチェック
+  const isAdminOrDeveloper = user?.role === 'admin' || user?.role === 'developer'
 
   // 現在の年月の1日を取得
   const getCurrentMonthStart = () => {
@@ -539,9 +544,14 @@ const ShiftPage: React.FC<ShiftPageProps> = ({ initialMonth }) => {
           </div>
           <div className="flex items-start gap-3 no-print">
             <button
-              onClick={() => setEditMode(!editMode)}
+              onClick={() => isAdminOrDeveloper && setEditMode(!editMode)}
+              disabled={!isAdminOrDeveloper}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                editMode ? 'bg-yellow-500 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                !isAdminOrDeveloper
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : editMode
+                    ? 'bg-yellow-500 text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               <Edit3 className="w-4 h-4" />
